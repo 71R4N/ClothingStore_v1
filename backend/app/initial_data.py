@@ -13,7 +13,7 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import async_session_maker
+from app.core.database import AsyncSessionLocal
 from app.users.models import User
 from app.catalog.models import Category, Product, ProductImage, ProductSize, ProductColor
 from app.reviews.models import Review
@@ -126,7 +126,7 @@ async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]
 # ---------- Основная функция заполнения ----------
 async def init_db():
     logger.info("Начинаем заполнение базы тестовыми данными...")
-    async with async_session_maker() as session:
+    async with AsyncSessionLocal() as session:
         async with session.begin():
             # --- Категории ---
             for cat_data in CATEGORIES:
