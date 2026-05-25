@@ -89,4 +89,4 @@ class Return(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     order: Mapped[Order] = relationship("Order", back_populates="returns")
-    user: Mapped["User"] = relationship("User", back_populates="orders")  # если нужно
+    #user: Mapped["User"] = relationship("User", back_populates="orders")  # если нужно

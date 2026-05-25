@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Скрипт для заполнения базы данных тестовыми данными.
-Запуск: python -m app.initial_data
-"""
-
 import asyncio
 import logging
 from datetime import datetime, timedelta
@@ -14,11 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
-from app.users.models import User
+from app.users.models import User, UserSession
 from app.catalog.models import Category, Product, ProductImage, ProductSize, ProductColor
-from app.reviews.models import Review
+from app.orders.models import Address, Order   # <--- добавить
 from app.cart.models import CartItem
 from app.wishlist.models import Wishlist
+from app.reviews.models import Review
+from app.notifications.models import Notification
+from app.tryon.models import TryOnSession
+# Добавьте другие модели, если нужны (Order, PaymentTransaction и т.п.)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

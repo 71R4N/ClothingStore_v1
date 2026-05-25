@@ -34,8 +34,8 @@ migrate:
 # Загрузка начальных данных (если есть скрипт)
 load-data:
 	@echo "Загружаю начальные данные..."
-	@if $(DOCKER_COMPOSE) exec $(BACKEND_CONTAINER) python -c "import app.initial_data" &>/dev/null; then \
-		$(DOCKER_COMPOSE) exec $(BACKEND_CONTAINER) python -m app.initial_data; \
+	@if $(DOCKER_COMPOSE) exec -T $(BACKEND_CONTAINER) python -c "import app.initial_data" &>/dev/null; then \
+		$(DOCKER_COMPOSE) exec -T $(BACKEND_CONTAINER) python -m app.initial_data; \
 	else \
 		echo "Скрипт начальных данных не найден (app/initial_data.py). Пропускаю."; \
 	fi
