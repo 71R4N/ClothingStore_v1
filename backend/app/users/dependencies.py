@@ -1,6 +1,11 @@
-from backend.app.core.database import SessionDbDep
-from backend.app.users.repositories import UserRepo
-from backend.app.users.services import UserService
+from typing import Annotated
 
-def get_user_service(session: SessionDbDep) -> UserService:
+from fastapi import Depends
+from app.core.database import SessionDbDep
+from app.users.repositories import UserRepo
+from app.users.services import UserService
+
+def user_service(session: SessionDbDep) -> UserService:
     return UserService(UserRepo(session))
+
+UserServiceDep = Annotated[UserService, Depends(user_service)]

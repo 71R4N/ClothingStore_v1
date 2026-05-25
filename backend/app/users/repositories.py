@@ -1,12 +1,11 @@
-from backend.app.core.repository import SQLAlchemyRepo
-from backend.app.users.models import User
-from backend.app.users.schemas import RegisterUserSchema, UpdateUserSchema
+from app.core.repository import SqlAlchemyRepo
+from app.users.models import User
+from sqlalchemy import select
 
-class UserRepo(SQLAlchemyRepo[User, RegisterUserSchema]):
+class UserRepo(SqlAlchemyRepo):
     model = User
 
     async def get_by_email(self, email: str) -> User | None:
-        from sqlalchemy import select
         stmt = select(self.model).where(self.model.email == email)
-        res = await self.session.execute(stmt)
-        return res.scalar_one_or_none()
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

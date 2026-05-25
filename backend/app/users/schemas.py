@@ -1,29 +1,28 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from uuid import UUID
 from datetime import datetime
-from backend.app.users.models import UserRole
+from typing import Optional
 
-class UserBase(BaseModel):
+class UserCreate(BaseModel):
     email: EmailStr
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    password_hash: str
+    first_name: str
+    last_name: str
     phone: Optional[str] = None
 
-class RegisterUserSchema(UserBase):
-    password: str
-
-class UpdateUserSchema(BaseModel):
-    email: Optional[EmailStr] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    phone: Optional[str] = None
-    password: Optional[str] = None
-
-class ResponseUserSchema(UserBase):
-    id: int
-    created_at: datetime
+class UserRead(BaseModel):
+    id: UUID
+    email: EmailStr
+    first_name: str
+    last_name: str
+    phone: Optional[str]
     is_active: bool
-    role: UserRole
+    role: str
+    created_at: datetime
+    model_config = {"from_attributes": True}
 
-    class Config:
-        from_attributes = True
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    

@@ -1,44 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, status
+from app.users.schemas import UserRead, UserUpdate, UserCreate
+from app.users.dependencies import user_service as get_user_service
+from app.users.services import UserService
+from app.auth.dependencies import CurrentUserDep
 from typing import Annotated
-from backend.app.users.schemas import RegisterUserSchema, UpdateUserSchema, ResponseUserSchema
-from backend.app.users.services import UserService
-from backend.app.users.dependencies import get_user_service
-from backend.app.auth.dependencies import get_current_user  # будет создано позже
-from backend.app.users.models import User
+from uuid import UUID
 
-router = APIRouter(prefix="/users", tags=["Users"])
-UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+router = APIRouter(prefix="/users", tags=["users"])
+UserSvcDep = Annotated[UserService, Depends(get_user_service)]
 
-@router.post("/register", response_model=dict)
-async def register_user(user_data: RegisterUserSchema, service: UserServiceDep):
-    # проверка на существующего пользователя
-    existing = await service.get_user_by_email(user_data.email)
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    user_id = await service.create_user(user_data)
-    return {"user_id": user_id, "message": "User created successfully"}
+@router.get("/me", response_model=UserRead)
+async def get_me(current_user: CurrentUserDep):
+    return current_user
 
-@router.get("/me", response_model=ResponseUserSchema)
-async def get_current_user_info(current_user: Annotated[User, Depends(get_current_user)]):
-    return ResponseUserSchema.model_validate(current_user)
-
-@router.patch("/me", response_model=ResponseUserSchema)
-async def update_current_user(
-    user_data: UpdateUserSchema,
-    current_user: Annotated[User, Depends(get_current_user)],
-    service: UserServiceDep
+@router.patch("/me", response_model=UserRead)
+async def update_me(
+    update_data: UserUpdate,
+    current_user: CurrentUserDep,
+    user_svc: CurrentUserDep,
 ):
-    updated = await service.update_user(current_user.id, user_data)
-    if not updated:
-        raise HTTPException(status_code=404, detail="User not found")
+    updated = await user_svc.update(str(current_user.id), update_data, partial=True)
     return updated
 
-@router.delete("/me", response_model=dict)
-async def delete_current_user(
-    current_user: Annotated[User, Depends(get_current_user)],
-    service: UserServiceDep
-):
-    success = await service.delete_user(current_user.id)
-    if not success:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"message": "User deleted"}
+@router.get("/{user_id}", response_model=UserRead)
+async def get_user(user_id: UUID, user_svc: UserSvcDep):
+    return await user_svc.get_by_id(str(user_id))
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: UUID, user_svc: UserSvcDep, current_user: CurrentUserDep):
+    # только админ или сам пользователь может удалить
+    if str(current_user.id) != str(user_id) and current_user.role != "admin":
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException()
+    await user_svc.delete(str(user_id))

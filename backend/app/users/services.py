@@ -1,47 +1,34 @@
-from backend.app.core.repository import AbstractRepo
-from backend.app.users.schemas import RegisterUserSchema, ResponseUserSchema, UpdateUserSchema
-from backend.app.core.security import hash_password, verify_password
-from backend.app.users.models import User
-from typing import Optional
+from app.core.repository import AbstractRepo
+from app.users.schemas import UserCreate, UserRead, UserUpdate
+from app.users.exceptions import UserNotFoundError
 
 class UserService:
     def __init__(self, user_repo: AbstractRepo):
         self.user_repo = user_repo
 
+    async def create_user(self, data: UserCreate):
+        user_id = await self.user_repo.create(data)
+        return user_id
 
-    async def create_user(self, data: RegisterUserSchema) -> int:
-        user_dict = data.model_dump()
-        user_dict["password_hash"] = hash_password(user_dict.pop("password"))
-        return await self.user_repo.create(user_dict)
-
-    async def get_user_by_id(self, user_id: int) -> Optional[ResponseUserSchema]:
-        user = await self.user_repo.get_by_id(user_id)
-        if user:
-            return ResponseUserSchema.model_validate(user)
-        return None
-
-    async def get_user_by_email(self, email: str) -> Optional[User]:
-        # прямой вызов метода репозитория (расширенного)
-        if hasattr(self.user_repo, "get_by_email"):
-            return await self.user_repo.get_by_email(email)
-        return None
-
-    async def authenticate(self, email: str, password: str) -> Optional[User]:
-        user = await self.get_user_by_email(email)
+    async def get_by_id(self, id):
+        user = await self.user_repo.read_by_id(id)
         if not user:
-            return None
-        if not verify_password(password, user.password_hash):
-            return None
+            raise UserNotFoundError()
         return user
 
-    async def update_user(self, user_id: int, data: UpdateUserSchema) -> Optional[ResponseUserSchema]:
-        if data.password:
-            data.password = hash_password(data.password)
-        updated = await self.user_repo.update(user_id, data)
-        if updated:
-            return ResponseUserSchema.model_validate(updated)
-        return None
+    async def get_by_email(self, email: str):
+        user = await self.user_repo.get_by_email(email)
+        return user  # может быть None
 
-    async def delete_user(self, user_id: int) -> bool:
-        deleted_id = await self.user_repo.delete(user_id)
-        return deleted_id > 0
+    async def get_all(self, skip: int = 0, limit: int = 100):
+        return await self.user_repo.read_all(skip, limit)
+
+    async def update(self, id, data: UserUpdate, partial: bool = True):
+        await self.get_by_id(id)  # проверка существования
+        updated = await self.user_repo.update(data, id, exclude_unset=partial)
+        return updated
+
+    async def delete(self, id):
+        await self.get_by_id(id)
+        deleted_id = await self.user_repo.delete(id)
+        return deleted_id
