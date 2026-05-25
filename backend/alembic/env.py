@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from app.core.config import settings
 from app.core.database import Base
 # Импортируем все модели, чтобы Alembic их видел
-from app.users.models import User
+from app.users.models import User, UserSession
 from app.catalog.models import Category, Product, ProductImage, ProductSize, ProductColor, SizeChart
 from app.cart.models import CartItem
 from app.orders.models import Address, Order, OrderItem, PaymentTransaction, Return

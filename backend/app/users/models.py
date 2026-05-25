@@ -1,4 +1,5 @@
 import uuid
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base, CreatedAtCol
@@ -27,4 +28,16 @@ class User(Base):
     orders: Mapped[List["Order"]] = relationship(back_populates="user")
     notifications: Mapped[List["Notification"]] = relationship(back_populates="user")
     tryon_sessions: Mapped[List["TryOnSession"]] = relationship(back_populates="user")
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    token: Mapped[str] = mapped_column(unique=True, index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    # Определяем связь. Это скалярная связь (один к одному/многим к одному)
+    user: Mapped["User"] = relationship(back_populates="sessions")
 
