@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Response, Request, HTTPException
+from app.auth.exceptions import CaptchaRequiredError, InvalidCaptchaError, InvalidCredentialsError
 from app.auth.schemas import LoginRequest, RegisterRequest, TokenResponse
 from app.auth.dependencies import UserServiceDep
-from app.auth.exceptions import InvalidCredentialsError
 from app.auth.services import AuthService
 from app.core.security import create_access_token, create_refresh_token, verify_password
 
@@ -33,24 +33,23 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-        response: Response,
-        data: LoginRequest,
-        user_svc: UserServiceDep
+    request: Request,
+    data: LoginRequest,
+    user_svc: UserServiceDep
 ):
     auth_svc = AuthService(user_svc)
-    user = await user_svc.get_by_email(data.email)
-    if not user or not verify_password(data.password, user.password_hash):
-        raise InvalidCredentialsError()
-
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
-
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    client_ip = request.client.host
+    try:
+        token = await auth_svc.authenticate(
+            email=data.email,
+            password=data.password,
+            captcha_response=data.captcha_response,
+            client_ip=client_ip
+        )
+        return {"access_token": token, "token_type": "bearer"}
+    except CaptchaRequiredError:
+        raise HTTPException(status_code=429, detail="Too many failed attempts. Captcha required.")
+    except InvalidCaptchaError:
+        raise HTTPException(status_code=400, detail="Invalid captcha")
+    except InvalidCredentialsError:
+        raise HTTPException(status_code=401, detail="Invalid email or password")

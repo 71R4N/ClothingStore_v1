@@ -5,11 +5,24 @@ const api = axios.create({
   withCredentials: true,   // ← обязательно для отправки/получения cookie
 });
 
-// Перехватчик для добавления access-токена в заголовок
+// Функция для получения CSRF-токена из cookie
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Добавляем CSRF-токен в заголовки для небезопасных методов
+  if (['post', 'put', 'delete', 'patch'].includes(config.method)) {
+    const csrfToken = getCookie('csrf_token');
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken;
+    }
   }
   return config;
 });

@@ -5,18 +5,22 @@ import { useNavigate, Link } from 'react-router-dom';
 
 const { Title } = Typography;
 
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+
 function LoginPage() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const onFinish = async (values) => {
     setLoading(true);
     try {
-      await login(values.email, values.password);
+      let captchaToken = null;
+      if (attempts >= 3) { // attempts — переменная, которую вы отслеживаете
+        captchaToken = await executeRecaptcha('login');
+      }
+      await login(values.email, values.password, captchaToken);
       navigate('/');
     } catch (e) {
-      message.error('Неверные email или пароль');
+      message.error('Ошибка входа');
     } finally {
       setLoading(false);
     }

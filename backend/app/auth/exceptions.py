@@ -5,3 +5,9 @@ class InvalidCredentialsError(UnauthorizedException):
 
 class EmailAlreadyExistsError(ConflictException):
     detail = "User with this email already exists"
+
+class CaptchaRequiredError(Exception):
+    pass
+
+class InvalidCaptchaError(Exception):
+    pass
