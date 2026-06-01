@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api/v1',
+  withCredentials: true,   // ← обязательно для отправки/получения cookie
 });
 
 api.interceptors.request.use(config => {

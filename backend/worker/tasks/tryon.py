@@ -13,7 +13,6 @@ def process_tryon_session(self, session_id: str):
             try:
                 await service.process_session(session_id)
             except Exception as e:
-                # обновить статус failed
                 session_obj = await repo.read_by_id(session_id)
                 if session_obj:
                     session_obj.status = "failed"

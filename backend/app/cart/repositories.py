@@ -6,6 +6,13 @@ from sqlalchemy.orm import selectinload
 class CartRepo(SqlAlchemyRepo):
     model = CartItem
 
+    async def create_item(self, **kwargs) -> CartItem:
+        item = self.model(**kwargs)
+        self.session.add(item)
+        await self.session.commit()
+        await self.session.refresh(item)
+        return item
+
     async def get_user_cart(self, user_id: str) -> list[CartItem]:
         stmt = select(self.model).where(
             self.model.user_id == user_id

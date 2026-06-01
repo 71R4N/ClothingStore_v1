@@ -29,10 +29,13 @@ class CartService:
             from app.cart.schemas import CartItemUpdate
             return await self.cart_repo.update(CartItemUpdate(quantity=existing.quantity), existing.id, exclude_unset=True)
         else:
-            new_data = data.model_dump()
-            new_data["user_id"] = user_id
-            new_data["session_id"] = session_id
-            return await self.cart_repo.create(CartItemCreate(**new_data))
+            item_data = data.model_dump()
+            item_data.update({
+                "user_id": user_id,
+                "session_id": session_id,
+            })
+            # Добавляем метод create_item в CartRepo (см. ниже) или используем прямой create
+            return await self.cart_repo.create_item(**item_data)
 
     async def get_cart(self, user_id: Optional[str], session_id: Optional[str]) -> list:
         if user_id:

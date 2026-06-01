@@ -30,4 +30,12 @@ class TryOnSessionRead(BaseModel):
     completed_at: Optional[datetime]
     error_message: Optional[str]
     model_config = {"from_attributes": True}
-    
+
+class TryOnCreate(BaseModel):
+    """Схема для создания новой сессии примерки"""
+    user_id: Optional[UUID] = None
+    product_id: int
+    person_image_url: str
+    garment_image_url: str
+    mask_image_url: Optional[str] = None
+    status: str = "queued"

@@ -1,5 +1,6 @@
 from app.core.repository import SqlAlchemyRepo
 from app.tryon.models import TryOnSession
+from sqlalchemy import select
 
 class TryOnRepo(SqlAlchemyRepo):
     model = TryOnSession

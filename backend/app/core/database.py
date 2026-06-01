@@ -35,3 +35,12 @@ class Base(DeclarativeBase):
     __abstract__ = True
     metadata = metadata
     # id не задаём в базовом классе, чтобы каждая модель определяла свой тип
+
+from app.users.models import User, UserSession
+from app.catalog.models import Category, Product, ProductImage, ProductSize, ProductColor, SizeChart
+from app.cart.models import CartItem
+from app.orders.models import Address, Order, OrderItem, PaymentTransaction, Return
+from app.reviews.models import Review
+from app.notifications.models import Notification
+from app.wishlist.models import Wishlist
+from app.tryon.models import TryOnSession

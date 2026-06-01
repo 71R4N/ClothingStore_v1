@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy import ForeignKey, Integer, String, Text, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
+from app.users.models import User
 from app.core.database import Base, CreatedAtCol
 from datetime import datetime
 from typing import Optional

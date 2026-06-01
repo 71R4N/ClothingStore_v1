@@ -12,24 +12,30 @@ CartServ = Annotated[CartService, Depends(CartServiceDep)]
 # Идентификация пользователя/сессии
 async def get_user_or_session(
     request: Request,
-    current_user = Depends(get_current_user)  # может быть None, если не передан токен
-) -> tuple[Optional[str], Optional[str]]:
+    response: Response,   # добавили response
+    current_user = Depends(get_current_user)
+) -> tuple[Optional[str], Optional[str], bool]:
     user_id = str(current_user.id) if current_user else None
     session_id = None
+    is_new = False
     if not user_id:
         session_id = request.cookies.get("cart_session_id")
         if not session_id:
-            session_id = str(uuid4())  # генерируем новую сессию
-    return user_id, session_id
+            session_id = str(uuid4())
+            is_new = True
+    return user_id, session_id, is_new
 
 @router.get("/", response_model=CartResponse)
 async def get_cart(
     cart_svc: CartServ,
+    response: Response,
     user_session: tuple = Depends(get_user_or_session)
 ):
-    user_id, session_id = user_session
+    user_id, session_id, is_new = user_session
+    if is_new:
+        response.set_cookie(key="cart_session_id", value=session_id, httponly=True, max_age=60*60*24*30)
     items = await cart_svc.get_cart(user_id, session_id)
-    total = sum(item.product.price * item.quantity for item in items if item.product)
+    total = sum((item.product.price if item.product else 0) * item.quantity for item in items)
     return {"items": items, "total": total}
 
 @router.post("/items", response_model=CartItemRead, status_code=201)
@@ -39,10 +45,9 @@ async def add_item(
     response: Response,
     user_session: tuple = Depends(get_user_or_session)
 ):
-    user_id, session_id = user_session
-    # если создалась новая сессия, установим cookie
-    if session_id and not user_id:
-        response.set_cookie(key="cart_session_id", value=session_id, httponly=True, max_age=60*60*24*30)
+    user_id, session_id, is_new = user_session
+    if is_new:
+        response.set_cookie(key="cart_session_id", value=session_id, httponly=True, max_age=60 * 60 * 24 * 30)
     return await cart_svc.add_to_cart(user_id, session_id, data)
 
 @router.patch("/items/{item_id}", response_model=CartItemRead)
