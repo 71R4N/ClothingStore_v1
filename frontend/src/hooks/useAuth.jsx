@@ -23,23 +23,25 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    const res = await authService.login(email, password);
-    localStorage.setItem('access_token', res.data.access_token);
-    const userRes = await userService.getMe();
-    setUser(userRes.data);
-  };
+  const res = await authService.login(email, password);
+  // Сохраняем только access-токен. Refresh-токен уже в httpOnly cookie
+  localStorage.setItem('access_token', res.data.access_token);
+  const userRes = await userService.getMe();
+  setUser(userRes.data);
+};
 
-  const register = async (data) => {
-    const res = await authService.register(data);
-    localStorage.setItem('access_token', res.data.access_token);
-    const userRes = await userService.getMe();
-    setUser(userRes.data);
-  };
+const register = async (data) => {
+  const res = await authService.register(data);
+  localStorage.setItem('access_token', res.data.access_token);
+  const userRes = await userService.getMe();
+  setUser(userRes.data);
+};
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    setUser(null);
-  };
+const logout = () => {
+  localStorage.removeItem('access_token');
+  // Опционально: вызвать эндпоинт /auth/logout, который очистит cookie на сервере
+  setUser(null);
+};
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout }}>
