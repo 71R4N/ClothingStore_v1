@@ -1,13 +1,11 @@
 from fastapi import APIRouter, Depends, Query, Path
 from app.catalog.schemas import (CategoryCreate, CategoryRead, CategoryUpdate,
-                                 ProductCreate, ProductRead, ProductUpdate,
-                                 SizeChartRead)
+                                 ProductCreate, ProductRead, ProductUpdate)
 from app.catalog.dependencies import CatalogServiceDep
 from typing import Optional
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
-# Categories
 @router.post("/categories", response_model=CategoryRead, status_code=201)
 async def create_category(data: CategoryCreate, service: CatalogServiceDep):
     cat_id = await service.create_category(data)
@@ -29,7 +27,6 @@ async def update_category(category_id: int, data: CategoryUpdate, service: Catal
 async def delete_category(category_id: int, service: CatalogServiceDep):
     await service.delete_category(category_id)
 
-# Products
 @router.post("/products", response_model=ProductRead, status_code=201)
 async def create_product(data: ProductCreate, service: CatalogServiceDep):
     prod_id = await service.create_product(data)
@@ -60,12 +57,3 @@ async def update_product(product_id: int, data: ProductUpdate, service: CatalogS
 @router.delete("/products/{product_id}", status_code=204)
 async def delete_product(product_id: int, service: CatalogServiceDep):
     await service.delete_product(product_id)
-
-# Size Charts
-@router.get("/size-charts", response_model=SizeChartRead)
-async def get_size_chart(
-    service: CatalogServiceDep,
-    category: str = Query(...),
-    region: str = Query("EU")
-):
-    return await service.get_size_chart(category, region)

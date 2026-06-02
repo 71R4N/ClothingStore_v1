@@ -12,7 +12,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 async def create_order(
         data: OrderCreate,
         order_svc: OrderServiceDep,
-        current_user: OptionalUserDep,  # ✅ Гости тоже могут заказывать
+        current_user: OptionalUserDep,
         session_id: str | None = Cookie(None)
 ):
     user_id = current_user.id if current_user else None

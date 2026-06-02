@@ -94,6 +94,20 @@ class ProductRepo(SqlAlchemyRepo):
         result = await self.session.execute(stmt)
         return result.scalars().unique().all()
 
+    async def read_by_slug(self, slug: str) -> Product | None:
+        stmt = (
+            select(self.model)
+            .where(self.model.slug == slug)
+            .options(
+                selectinload(self.model.sizes),
+                selectinload(self.model.colors),
+                selectinload(self.model.variants).selectinload(ProductVariant.color),
+                selectinload(self.model.variants).selectinload(ProductVariant.size),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
 
 class ProductVariantRepo(SqlAlchemyRepo):
     model = ProductVariant

@@ -3,7 +3,6 @@ from typing import Optional, List
 from datetime import datetime
 
 
-# Category
 class CategoryBase(BaseModel):
     name: str
     slug: str

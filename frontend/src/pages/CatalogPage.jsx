@@ -28,6 +28,14 @@ function CatalogPage() {
     fetchProducts();
   }, [searchParams]);
 
+  useEffect(() => {
+  const categoryFromUrl = searchParams.get('category');
+  if (categoryFromUrl && !searchParams.get('category_id')) {
+    searchParams.set('category_id', categoryFromUrl);
+    setSearchParams(searchParams);
+  }
+}, []);
+
   const onSearch = (value) => {
     if (value) searchParams.set('search', value);
     else searchParams.delete('search');

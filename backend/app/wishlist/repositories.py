@@ -3,6 +3,9 @@ from uuid import UUID
 from app.core.repository import SqlAlchemyRepo
 from app.wishlist.models import Wishlist
 from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
+
+from app.catalog.models import ProductVariant
 
 
 class WishlistRepo(SqlAlchemyRepo):
@@ -21,18 +24,26 @@ class WishlistRepo(SqlAlchemyRepo):
         )
         self.session.add(new_item)
         await self.session.commit()
-        await self.session.refresh(new_item)
+        await self.session.refresh(new_item, attribute_names=['variant'])
         return new_item
 
     async def get_user_wishlist(self, user_id: UUID):
-        stmt = select(self.model).where(self.model.user_id == user_id)
+        stmt = select(self.model).options(
+            selectinload(self.model.variant).selectinload(ProductVariant.product),
+            selectinload(self.model.variant).selectinload(ProductVariant.color),
+            selectinload(self.model.variant).selectinload(ProductVariant.size),
+        ).where(self.model.user_id == user_id)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 
     async def get_session_wishlist(self, session_id: str):
-        stmt = select(self.model).where(self.model.session_id == session_id)
+        stmt = select(self.model).options(
+            selectinload(self.model.variant).selectinload(ProductVariant.product),
+            selectinload(self.model.variant).selectinload(ProductVariant.color),
+            selectinload(self.model.variant).selectinload(ProductVariant.size),
+        ).where(self.model.session_id == session_id)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 
     async def find_item(
         self,

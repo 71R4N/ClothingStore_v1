@@ -16,6 +16,7 @@ import OrdersPage from './pages/OrdersPage';
 import OrderDetailPage from './pages/OrderDetailPage';
 import TryOnPage from './pages/TryOnPage';
 import NotFoundPage from './pages/NotFoundPage';
+import WishlistPage from './pages/WishlistPage';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/product/:slug" element={<ProductPage />} />
           <Route path="/cart" element={<CartPage />} />
+          <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           

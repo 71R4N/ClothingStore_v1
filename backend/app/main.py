@@ -8,6 +8,7 @@ from app.core.middleware import CSRFMiddleware
 from app.core.config import settings
 from contextlib import asynccontextmanager
 from app.core.redis_client import redis_client
+from fastapi.staticfiles import StaticFiles
 
 
 @asynccontextmanager
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(v1_router, prefix="/api/v1")
+app.mount("/images", StaticFiles(directory="static/images"), name="images")
 os.makedirs("static/tryon_results", exist_ok=True)
 app.mount("/tryon_results", StaticFiles(directory="static/tryon_results"), name="tryon_results")
 

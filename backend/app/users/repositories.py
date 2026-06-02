@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from app.core.repository import SqlAlchemyRepo
 from app.users.models import User
 from sqlalchemy import select, insert

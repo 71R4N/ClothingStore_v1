@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { catalogService } from '../services/catalogService';
 import { useCart } from '../hooks/useCart';
+import { useWishlist } from '../hooks/useWishlist';
+import { HeartOutlined, HeartFilled } from '@ant-design/icons';
 import { Typography, Button, Image, Select, Row, Col, Space, Spin } from 'antd';
 
 const { Title, Text } = Typography;
@@ -12,6 +14,7 @@ function ProductPage() {
   const [selectedSizeId, setSelectedSizeId] = useState(null);
   const [selectedColorId, setSelectedColorId] = useState(null);
   const { addToCart } = useCart();
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
   useEffect(() => {
     catalogService.getProductBySlug(slug)
@@ -139,6 +142,20 @@ function ProductPage() {
               </Text>
             )}
 
+            <Button 
+              icon={isInWishlist(selectedVariant?.id) ? <HeartFilled style={{color: '#ff4d4f'}} /> : <HeartOutlined />}
+              onClick={() => {
+                if (isInWishlist(selectedVariant?.id)) {
+                  removeFromWishlist(selectedVariant.id);
+                } else {
+                  addToWishlist(selectedVariant.id);
+                }
+              }}
+              disabled={!selectedVariant}
+              size="large"
+            >
+              {isInWishlist(selectedVariant?.id) ? 'В избранном' : 'В избранное'}
+            </Button>
             <Button 
               type="primary" 
               size="large" 
