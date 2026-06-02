@@ -18,7 +18,7 @@ class CategoryCreate(CategoryBase):
 
 class CategoryRead(CategoryBase):
     id: int
-    children: List["CategoryRead"] = []
+    children: List["CategoryRead"] = Field(default_factory=list)
     model_config = {"from_attributes": True}
 
 
@@ -44,7 +44,6 @@ class ProductSizeRead(ProductSizeBase):
     model_config = {"from_attributes": True}
 
 
-# ProductColor
 class ProductColorBase(BaseModel):
     color_name: str
     color_hex: str
@@ -88,19 +87,17 @@ class ProductBase(BaseModel):
 
 
 class ProductCreate(ProductBase):
-    images: Optional[List[ProductImageBase]] = []
-    sizes: Optional[List[ProductSizeBase]] = []
-    colors: Optional[List[ProductColorBase]] = []
-    variants: Optional[List[ProductVariantCreate]] = []
+    sizes: List[ProductSizeBase] = Field(default_factory=list)
+    colors: List[ProductColorBase] = Field(default_factory=list)
+    variants: List[ProductVariantCreate] = Field(default_factory=list)
 
 
 class ProductRead(ProductBase):
     id: int
     created_at: datetime
-    images: List[ProductImageRead] = []
-    sizes: List[ProductSizeRead] = []
-    colors: List[ProductColorRead] = []
-    variants: List[ProductVariantRead] = []
+    sizes: List[ProductSizeRead] = Field(default_factory=list)
+    colors: List[ProductColorRead] = Field(default_factory=list)
+    variants: List[ProductVariantRead] = Field(default_factory=list)
     model_config = {"from_attributes": True}
 
 

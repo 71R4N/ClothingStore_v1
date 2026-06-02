@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -7,7 +7,7 @@ from app.catalog.schemas import ProductVariantRead
 
 class OrderItemBase(BaseModel):
     variant_id: int
-    quantity: int
+    quantity: int = Field(gt=0)
     price_at_purchase: float
 
 
@@ -24,7 +24,7 @@ class OrderBase(BaseModel):
 
 
 class OrderCreate(OrderBase):
-    items: List[OrderItemBase]
+    pass
 
 
 class OrderRead(OrderBase):
@@ -34,7 +34,7 @@ class OrderRead(OrderBase):
     total: float
     created_at: datetime
     updated_at: datetime
-    items: List[OrderItemRead] = []
+    items: List[OrderItemRead] = Field(default_factory=list)
     model_config = {"from_attributes": True}
 
 

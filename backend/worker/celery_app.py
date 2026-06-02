@@ -5,7 +5,10 @@ celery = Celery(
     "catvton_shop",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["worker.tasks.tryon", "worker.tasks.notifications"]
+    include=[
+        "worker.tasks.tryon",
+        "worker.tasks.cleanup",
+    ]
 )
 
 celery.conf.update(
@@ -17,3 +20,12 @@ celery.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
 )
+
+# Настройка периодических задач
+celery.conf.beat_schedule = {
+    "cleanup-old-tryon-results": {
+        "task": "worker.tasks.cleanup.cleanup_old_tryon_results",
+        "schedule": 3600.0,
+        "args": (24,),  # Удалять файлы старше 24 часов
+    },
+}

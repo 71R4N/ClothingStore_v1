@@ -1,151 +1,114 @@
-import httpx
-from app.orders.repositories import OrderRepo, OrderItemRepo, PaymentRepo, ReturnRepo, AddressRepo
-from app.orders.schemas import OrderCreate, OrderStatusUpdate, ReturnRequest
-from app.orders.exceptions import OrderNotFoundError, PaymentFailedError, InvalidOrderStatusError
-from app.cart.services import CartService  # для очистки корзины
-from app.core.config import settings
-from typing import Optional, List
+from app.orders.repositories import OrderRepo, OrderItemRepo
+from app.orders.schemas import OrderCreate, OrderStatusUpdate
+from app.orders.exceptions import OrderNotFoundError, InvalidOrderStatusError
+from app.cart.services import CartService
+from app.catalog.repositories import ProductVariantRepo
+from app.orders.models import Order, OrderItem
+from typing import Optional
 from uuid import UUID
+import logging
 
-from app.orders.models import Order
-
-from app.orders.schemas import OrderItemBase
+logger = logging.getLogger(__name__)
 
 
 class OrderService:
-    def __init__(self, order_repo: OrderRepo, order_item_repo: OrderItemRepo,
-                 payment_repo: PaymentRepo, return_repo: ReturnRepo,
-                 address_repo: AddressRepo, cart_service: CartService):
+    def __init__(
+            self,
+            order_repo: OrderRepo,
+            order_item_repo: OrderItemRepo,
+            cart_service: CartService,
+            variant_repo: ProductVariantRepo
+    ):
         self.order_repo = order_repo
         self.order_item_repo = order_item_repo
-        self.payment_repo = payment_repo
-        self.return_repo = return_repo
-        self.address_repo = address_repo
         self.cart_service = cart_service
+        self.variant_repo = variant_repo
 
-    async def create_order(self, user_id: Optional[str], session_id: Optional[str], data: OrderCreate) -> Order:
+    async def create_order(
+            self,
+            user_id: Optional[UUID],
+            session_id: Optional[str],
+            data: OrderCreate
+    ) -> Order:
         # Получаем корзину
         cart_items = await self.cart_service.get_cart(user_id, session_id)
         if not cart_items:
             raise ValueError("Cart is empty")
 
-        # Вычисляем суммы
-        subtotal = sum(item.product.price * item.quantity for item in cart_items)
-        shipping_cost = 0.0  # можно рассчитать
-        total = subtotal + shipping_cost - 0  # discount пока 0
+        # Проверяем наличие всех вариантов и вычисляем сумму
+        total = 0.0
+        validated_items = []
+
+        for cart_item in cart_items:
+            variant = await self.variant_repo.read_by_id(cart_item.variant_id)
+            if not variant:
+                raise ValueError(f"Variant {cart_item.variant_id} not found")
+            if variant.stock_quantity < cart_item.quantity:
+                raise ValueError(f"Insufficient stock for variant {variant.sku}")
+            item_total = float(variant.price) * cart_item.quantity
+            total += item_total
+
+            validated_items.append({
+                "variant_id": cart_item.variant_id,
+                "quantity": cart_item.quantity,
+                "price_at_purchase": float(variant.price)
+            })
 
         # Создаём заказ
-        order = await self.order_repo.create(OrderCreate(
-            user_id=user_id,
-            guest_email=data.guest_email,
-            status="pending",
-            subtotal=subtotal,
-            shipping_cost=shipping_cost,
-            total=total,
-            shipping_address_id=data.shipping_address_id,
-            payment_method=data.payment_method,
-            payment_status="pending"
-        ))
+        order_data = data.model_dump()
+        order_data["user_id"] = user_id
+        order_data["total"] = total
+        order_data["status"] = "pending"
 
-        # Переносим элементы корзины в order_items
-        for item in cart_items:
-            order_item = OrderItemBase(
-                product_id=item.product_id,
-                size_id=item.size_id,
-                color_id=item.color_id,
-                quantity=item.quantity,
-                price_at_purchase=item.product.price
+        order = await self.order_repo.create(OrderCreate(**order_data))
+
+        # Создаём элементы заказа
+        for item_data in validated_items:
+            order_item = OrderItem(
+                order_id=order,
+                variant_id=item_data["variant_id"],
+                quantity=item_data["quantity"],
+                price_at_purchase=item_data["price_at_purchase"]
             )
-            await self.order_item_repo.create(order_item, order_id=order.id)
+            await self.order_item_repo.create(order_item)
+
+        for item_data in validated_items:
+            variant = await self.variant_repo.read_by_id(item_data["variant_id"])
+            variant.stock_quantity -= item_data["quantity"]
+            await self.variant_repo.update(variant, variant.id)
 
         # Очищаем корзину
         await self.cart_service.clear_cart(user_id, session_id)
 
-        return order
+        # Возвращаем заказ с подгруженными items
+        return await self.get_order(order)
 
-    async def get_order(self, order_id: str) -> Order:
+    async def get_order(self, order_id: UUID) -> Order:
         order = await self.order_repo.get_with_items(order_id)
         if not order:
             raise OrderNotFoundError()
         return order
 
-    async def get_user_orders(self, user_id: str, skip: int = 0, limit: int = 20):
+    async def get_user_orders(self, user_id: UUID, skip: int = 0, limit: int = 20):
         return await self.order_repo.get_user_orders(user_id, skip, limit)
 
-    async def update_status(self, order_id: str, status: str):
+    async def update_status(self, order_id: UUID, status: str):
         order = await self.get_order(order_id)
+
         # Проверка допустимости перехода
         valid_transitions = {
-            "pending": ["paid", "cancelled"],
-            "paid": ["processing", "cancelled"],
+            "pending": ["processing", "cancelled"],
             "processing": ["shipped", "cancelled"],
-            "shipped": ["delivered", "returned"],
-            "delivered": ["returned"],
-            "returned": [],
+            "shipped": ["delivered"],
+            "delivered": [],
             "cancelled": []
         }
+
         if status not in valid_transitions.get(order.status, []):
-            raise InvalidOrderStatusError()
-        await self.order_repo.update(OrderStatusUpdate(status=status), order_id, exclude_unset=False)
+            raise InvalidOrderStatusError(
+                detail=f"Cannot transition from {order.status} to {status}"
+            )
 
-    async def initiate_payment(self, order_id: str) -> PaymentTransaction:
-        order = await self.get_order(order_id)
-        if order.payment_status != "pending":
-            raise PaymentFailedError(detail="Payment already processed")
-
-        # Вызов T-Bank API (эмуляция)
-        async with httpx.AsyncClient() as client:
-            payload = {
-                "order_id": str(order.id),
-                "amount": order.total,
-                "return_url": "http://localhost:5173/order/result"
-            }
-            # В реальности используем API Т-Банка
-            # response = await client.post(f"{settings.TBANK_API_URL}/init", json=payload)
-            # external_id = response.json().get("payment_id")
-            # Эмуляция
-            external_id = f"tb_{order.id}"
-            payment_status = "success"  # sandbox
-
-        payment = PaymentTransaction(
-            order_id=order.id,
-            provider="tbank",
-            external_id=external_id,
-            amount=order.total,
-            status=payment_status,
-            response_data={"sandbox": True}
-        )
-        payment = await self.payment_repo.create(payment)
-
-        # Обновить статус заказа и платежа
-        if payment_status == "success":
-            await self.update_status(str(order.id), "paid")
-            await self.order_repo.update({"payment_status": "success"}, order.id, exclude_unset=True)
-        else:
-            await self.order_repo.update({"payment_status": "failed"}, order.id, exclude_unset=True)
-
-        return payment
-
-    async def request_return(self, order_id: str, user_id: str, data: ReturnRequest) -> Return:
-        order = await self.get_order(order_id)
-        if order.status not in ["delivered", "shipped"]:
-            raise InvalidOrderStatusError("Return not allowed in current status")
-        ret = Return(
-            order_id=order.id,
-            user_id=user_id,
-            reason=data.reason,
-            comment=data.comment,
-            items=data.items,
-            status="requested"
-        )
-        return await self.return_repo.create(ret)
-
-    async def process_return(self, return_id: str, status: str):
-        ret = await self.return_repo.read_by_id(return_id)
-        if not ret:
-            raise NotFoundException(detail="Return request not found")
-        ret.status = status
-        if status in ["refunded", "rejected"]:
-            ret.resolved_at = datetime.utcnow()
-        return await self.return_repo.update(ret, return_id, exclude_unset=False)
-    
+        update_schema = OrderStatusUpdate(status=status)
+        await self.order_repo.update(update_schema, order_id, exclude_unset=True)
+        return await self.get_order(order_id)

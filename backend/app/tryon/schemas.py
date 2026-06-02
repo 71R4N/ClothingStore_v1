@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -16,6 +16,7 @@ class TryOnResult(BaseModel):
     status: str
     result_image_url: Optional[str] = None
     error_message: Optional[str] = None
+    duration_ms: Optional[int] = None
     created_at: datetime
 
 
@@ -26,10 +27,11 @@ class TryOnSessionRead(BaseModel):
     person_image_url: str
     garment_image_url: str
     status: str
-    result_image_url: Optional[str]
+    result_image_url: Optional[str] = None
+    duration_ms: Optional[int] = None
     created_at: datetime
-    completed_at: Optional[datetime]
-    error_message: Optional[str]
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
     model_config = {"from_attributes": True}
 
 

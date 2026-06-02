@@ -1,9 +1,12 @@
 import uuid
 from sqlalchemy import ForeignKey, Integer, String, Text, Numeric, Boolean, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base, CreatedAtCol
 from typing import List, Optional
+from app.cart.models import CartItem
+from app.orders.models import OrderItem
+from app.wishlist.models import Wishlist
+from app.tryon.models import TryOnSession
 
 
 class Category(Base):
@@ -34,9 +37,15 @@ class Product(Base):
     created_at: Mapped[CreatedAtCol]
 
     category: Mapped[Category] = relationship("Category", back_populates="products")
-    sizes: Mapped[List["ProductSize"]] = relationship("ProductSize", back_populates="product")
-    colors: Mapped[List["ProductColor"]] = relationship("ProductColor", back_populates="product")
-    variants: Mapped[List["ProductVariant"]] = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
+    sizes: Mapped[List["ProductSize"]] = relationship(
+        "ProductSize", back_populates="product", cascade="all, delete-orphan"
+    )
+    colors: Mapped[List["ProductColor"]] = relationship(
+        "ProductColor", back_populates="product", cascade="all, delete-orphan"
+    )
+    variants: Mapped[List["ProductVariant"]] = relationship(
+        "ProductVariant", back_populates="product", cascade="all, delete-orphan"
+    )
 
 
 class ProductSize(Base):
@@ -76,7 +85,8 @@ class ProductVariant(Base):
     size_id: Mapped[int] = mapped_column(Integer, ForeignKey("product_sizes.id", ondelete="CASCADE"))
     sku: Mapped[str] = mapped_column(String(100), unique=True)
     stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
-    price: Mapped[float] = mapped_column(Numeric(10, 2))
+    price: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
+    # ✅ Изображения варианта хранятся здесь
     image_url: Mapped[Optional[str]] = mapped_column(String(500))
     attributes: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 

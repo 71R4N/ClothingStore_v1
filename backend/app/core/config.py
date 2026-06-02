@@ -30,8 +30,11 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ML
-    CATVTON_MODEL_PATH: str = "/app/ml_models/catvton"
+    # CatVTON
+    CATVTON_API_URL: str = "http://localhost:8001"
+    CATVTON_TIMEOUT: int = 300
+    CATVTON_ENABLED: bool = False
+    CATVTON_FALLBACK_IMAGE: str = "/static/images/tryon_fallback.png"
 
     TBANK_API_URL: str = "https://sandbox.tbank.ru/api"
     TBANK_MERCHANT_ID: str = ""

@@ -6,7 +6,7 @@ from app.catalog.schemas import ProductVariantRead
 
 
 class CartItemBase(BaseModel):
-    variant_id: int  # ← заменено!
+    variant_id: int
     quantity: int = Field(gt=0)
 
 
@@ -23,7 +23,7 @@ class CartItemRead(CartItemBase):
     user_id: Optional[UUID]
     session_id: Optional[str]
     added_at: datetime
-    variant: Optional[ProductVariantRead] = None  # ← подгружаем вариант
+    variant: Optional[ProductVariantRead] = None
     model_config = {"from_attributes": True}
 
 

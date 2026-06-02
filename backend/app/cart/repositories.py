@@ -1,7 +1,10 @@
 from app.core.repository import SqlAlchemyRepo
 from app.cart.models import CartItem
-from sqlalchemy import select, delete, and_
+from app.catalog.models import ProductVariant
+from sqlalchemy import select, delete, and_, or_
 from sqlalchemy.orm import selectinload
+from uuid import UUID
+
 
 class CartRepo(SqlAlchemyRepo):
     model = CartItem
@@ -13,58 +16,74 @@ class CartRepo(SqlAlchemyRepo):
         await self.session.refresh(item)
         return item
 
-    async def get_user_cart(self, user_id: str) -> list[CartItem]:
+    async def get_user_cart(self, user_id: UUID) -> list[CartItem]:
         stmt = select(self.model).where(
             self.model.user_id == user_id
         ).options(
-            selectinload(self.model.product),
-            selectinload(self.model.size),
-            selectinload(self.model.color)
+            selectinload(self.model.variant).selectinload(ProductVariant.product),
+            selectinload(self.model.variant).selectinload(ProductVariant.color),
+            selectinload(self.model.variant).selectinload(ProductVariant.size),
         )
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 
     async def get_session_cart(self, session_id: str) -> list[CartItem]:
         stmt = select(self.model).where(
             self.model.session_id == session_id
         ).options(
-            selectinload(self.model.product),
-            selectinload(self.model.size),
-            selectinload(self.model.color)
+            selectinload(self.model.variant).selectinload(ProductVariant.product),
+            selectinload(self.model.variant).selectinload(ProductVariant.color),
+            selectinload(self.model.variant).selectinload(ProductVariant.size),
         )
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 
-    async def find_item(self, user_id: str | None, session_id: str | None,
-                        product_id: int, size_id: int | None, color_id: int | None) -> CartItem | None:
-        conditions = [self.model.product_id == product_id]
+    async def find_item(
+            self,
+            user_id: UUID | None,
+            session_id: str | None,
+            variant_id: int
+    ) -> CartItem | None:
+        conditions = [self.model.variant_id == variant_id]
+
         if user_id:
             conditions.append(self.model.user_id == user_id)
         elif session_id:
             conditions.append(self.model.session_id == session_id)
-        if size_id:
-            conditions.append(self.model.size_id == size_id)
-        if color_id:
-            conditions.append(self.model.color_id == color_id)
+        else:
+            return None
 
         stmt = select(self.model).where(and_(*conditions))
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def merge_session_cart_to_user(self, user_id: str, session_id: str):
-        # При авторизации переносим корзину сессии пользователю
+    async def merge_session_cart_to_user(self, user_id: UUID, session_id: str):
+        """При авторизации переносим корзину сессии пользователю."""
         session_items = await self.get_session_cart(session_id)
+
         for item in session_items:
-            existing = await self.find_item(user_id, None, item.product_id, item.size_id, item.color_id)
+            existing = await self.find_item(user_id, None, item.variant_id)
             if existing:
+                # Если товар уже есть в корзине юзера — увеличиваем количество
                 existing.quantity += item.quantity
-                await self.session.merge(existing)
+                await self.session.delete(item)  # Удаляем гостевую запись
             else:
+                # Иначе просто привязываем гостевую запись к юзеру
                 item.user_id = user_id
                 item.session_id = None
-                await self.session.merge(item)
-        # Удаляем оставшиеся с session_id (если не все перенеслись)
-        stmt = delete(self.model).where(self.model.session_id == session_id)
+
+        await self.session.commit()
+
+    async def clear_cart(self, user_id: UUID | None, session_id: str | None):
+        conditions = []
+        if user_id:
+            conditions.append(self.model.user_id == user_id)
+        if session_id:
+            conditions.append(self.model.session_id == session_id)
+        if not conditions:
+            return
+        stmt = delete(self.model).where(
+            or_(*conditions) if len(conditions) > 1 else conditions[0]
+        )
         await self.session.execute(stmt)
         await self.session.commit()
-        

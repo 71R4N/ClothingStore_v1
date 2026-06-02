@@ -1,15 +1,24 @@
-from app.catalog.repositories import CategoryRepo, ProductRepo, SizeChartRepo
+from app.catalog.repositories import CategoryRepo, ProductRepo, ProductVariantRepo
 from app.catalog.schemas import CategoryCreate, CategoryUpdate, ProductCreate, ProductUpdate
 from app.catalog.exceptions import CategoryNotFoundError, ProductNotFoundError
+from app.catalog.models import Product, ProductSize, ProductColor, ProductVariant
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class CatalogService:
-    def __init__(self, category_repo: CategoryRepo, product_repo: ProductRepo, size_chart_repo: SizeChartRepo):
+    def __init__(
+        self,
+        category_repo: CategoryRepo,
+        product_repo: ProductRepo,
+        variant_repo: ProductVariantRepo
+    ):
         self.category_repo = category_repo
         self.product_repo = product_repo
-        self.size_chart_repo = size_chart_repo
+        self.variant_repo = variant_repo
 
-    # Категории
     async def create_category(self, data: CategoryCreate) -> int:
         return await self.category_repo.create(data)
 
@@ -36,14 +45,49 @@ class CatalogService:
         await self.get_category(category_id)
         return await self.category_repo.delete(category_id)
 
-    # Продукты
     async def create_product(self, data: ProductCreate) -> int:
-        # product создаётся без вложенных коллекций, их нужно обрабатывать отдельно
-        # Но в схеме данные уже все вместе, можно создать продукт и связанные сущности.
-        # Упростим: создадим только продукт, а изображения, размеры и цвета добавим в репозитории.
-        product_data = data.model_dump(exclude={"images", "sizes", "colors"})
+        product_data = data.model_dump(exclude={"sizes", "colors", "variants"})
         product_id = await self.product_repo.create(ProductCreate(**product_data))
-        # TODO: добавить создание images, sizes, colors через отдельные репозитории, но для MVP можно пропустить
+        product = await self.product_repo.read_by_id(product_id)
+        session = self.product_repo.session
+
+        # Размеры
+        size_map: dict[str, int] = {}
+        for size_data in data.sizes:
+            size = ProductSize(product_id=product_id, **size_data.model_dump())
+            session.add(size)
+            await session.flush()
+            size_map[size_data.size_label] = size.id
+
+        # Цвета
+        color_map: dict[str, int] = {}
+        for color_data in data.colors:
+            color = ProductColor(product_id=product_id, **color_data.model_dump())
+            session.add(color)
+            await session.flush()
+            color_map[color_data.color_name] = color.id
+
+        # Варианты
+        if data.variants:
+            for variant_data in data.variants:
+                variant = ProductVariant(product_id=product_id, **variant_data.model_dump())
+                session.add(variant)
+        else:
+            # Автогенерация комбинаций sizes x colors
+            for size_label, size_id in size_map.items():
+                for color_name, color_id in color_map.items():
+                    sku = f"{product.slug.upper()}-{size_label}-{color_name.replace(' ', '')}"
+                    variant = ProductVariant(
+                        product_id=product_id,
+                        size_id=size_id,
+                        color_id=color_id,
+                        sku=sku,
+                        stock_quantity=0,
+                        price=0.0,
+                    )
+                    session.add(variant)
+
+        await session.commit()
         return product_id
 
     async def get_product(self, product_id: int):
@@ -58,9 +102,18 @@ class CatalogService:
             raise ProductNotFoundError()
         return prod
 
-    async def get_products(self, skip: int = 0, limit: int = 20, category_id: Optional[int] = None,
-                           search: Optional[str] = None, sort_by: Optional[str] = None, order: str = "asc"):
-        return await self.product_repo.read_all_with_relations(skip, limit, category_id, search, sort_by, order)
+    async def get_products(
+        self,
+        skip: int = 0,
+        limit: int = 20,
+        category_id: Optional[int] = None,
+        search: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        order: str = "asc"
+    ):
+        return await self.product_repo.read_all_with_relations(
+            skip, limit, category_id, search, sort_by, order
+        )
 
     async def update_product(self, product_id: int, data: ProductUpdate):
         await self.get_product(product_id)
@@ -69,11 +122,3 @@ class CatalogService:
     async def delete_product(self, product_id: int):
         await self.get_product(product_id)
         return await self.product_repo.delete(product_id)
-
-    # Размерные сетки
-    async def get_size_chart(self, category: str, region: str):
-        chart = await self.size_chart_repo.get_by_category_region(category, region)
-        if not chart:
-            raise NotFoundException(detail="Size chart not found")
-        return chart
-    
