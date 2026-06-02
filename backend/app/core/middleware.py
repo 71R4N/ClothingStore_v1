@@ -1,47 +1,33 @@
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
-import secrets
-import hmac
+
+PUBLIC_PATHS = [
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/csrf",
+    "/api/v1/auth/logout",
+]
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # Пути, которые НЕ требуют CSRF-токена (публичные эндпоинты)
-        exempt_paths = [
-            "/api/v1/auth/register",
-            "/api/v1/auth/login",
-            "/api/v1/auth/refresh",
-            "/api/v1/auth/guest",
-            "/docs",
-            "/openapi.json",
-            "/health",
-        ]
+        # Пропускаем безопасные методы
+        if request.method in ["GET", "HEAD", "OPTIONS"]:
+            return await call_next(request)
 
-        # Проверяем, нужно ли применять CSRF для этого пути
-        is_exempt = any(request.url.path.startswith(path) for path in exempt_paths)
+        # Пропускаем публичные эндпоинты
+        if request.url.path in PUBLIC_PATHS:
+            return await call_next(request)
 
-        # Для небезопасных методов и НЕ исключённых путей
-        if request.method in ["POST", "PUT", "DELETE", "PATCH"] and not is_exempt:
-            csrf_token_header = request.headers.get("X-CSRF-Token")
-            csrf_token_cookie = request.cookies.get("csrf_token")
+        # Получаем CSRF из cookie и из заголовка
+        csrf_cookie = request.cookies.get("csrf_token")
+        csrf_header = request.headers.get("X-CSRF-Token")
 
-            if not csrf_token_header or not csrf_token_cookie:
-                raise HTTPException(status_code=403, detail="CSRF token missing")
-            if not hmac.compare_digest(csrf_token_header, csrf_token_cookie):
-                raise HTTPException(status_code=403, detail="CSRF token invalid")
+        if not csrf_cookie or not csrf_header:
+            raise HTTPException(status_code=403, detail="CSRF token missing")
 
-        # Для GET-запросов: если CSRF-токена нет, генерируем и устанавливаем
-        if request.method == "GET" and not request.cookies.get("csrf_token"):
-            csrf_token = secrets.token_urlsafe(32)
-            response = await call_next(request)
-            response.set_cookie(
-                key="csrf_token",
-                value=csrf_token,
-                httponly=False,
-                secure=True,
-                samesite="lax"
-            )
-            return response
+        if csrf_cookie != csrf_header:
+            raise HTTPException(status_code=403, detail="CSRF token invalid")
 
-        response = await call_next(request)
-        return response
+        return await call_next(request)

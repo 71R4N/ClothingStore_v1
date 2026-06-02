@@ -15,16 +15,23 @@ async def get_me(current_user: CurrentUserDep):
 
 @router.patch("/me", response_model=UserRead)
 async def update_me(
-    update_data: UserUpdate,
-    current_user: CurrentUserDep,
-    user_svc: CurrentUserDep,
+   update_data: UserUpdate,
+   current_user: CurrentUserDep,
+   user_svc: UserSvcDep,
 ):
-    updated = await user_svc.update(str(current_user.id), update_data, partial=True)
-    return updated
+   updated = await user_svc.update(current_user.id, update_data, partial=True)
+   return updated
 
 @router.get("/{user_id}", response_model=UserRead)
-async def get_user(user_id: UUID, user_svc: UserSvcDep):
-    return await user_svc.get_by_id(str(user_id))
+async def get_user(
+    user_id: UUID,
+    user_svc: UserSvcDep,
+    current_user: CurrentUserDep
+):
+    if current_user.role != "admin" and current_user.id != user_id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException()
+    return await user_svc.get_by_id(user_id)
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: UUID, user_svc: UserSvcDep, current_user: CurrentUserDep):

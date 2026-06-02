@@ -1,11 +1,19 @@
 import axios from 'axios';
 
+
+let accessToken = null;
+
+export const setAccessToken = (token) => {
+  accessToken = token;
+};
+
+export const getAccessToken = () => accessToken;
+
 const api = axios.create({
   baseURL: '/api/v1',
-  withCredentials: true,   // ← обязательно для отправки/получения cookie
+  withCredentials: true,
 });
 
-// Функция для получения CSRF-токена из cookie
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
@@ -13,11 +21,9 @@ function getCookie(name) {
 }
 
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
-  // Добавляем CSRF-токен в заголовки для небезопасных методов
   if (['post', 'put', 'delete', 'patch'].includes(config.method)) {
     const csrfToken = getCookie('csrf_token');
     if (csrfToken) {
@@ -27,7 +33,6 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// Перехватчик для обновления токенов при ошибке 401
 api.interceptors.response.use(
   response => response,
   async error => {
@@ -35,14 +40,13 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        // Запрос на обновление токенов (refresh-токен отправится автоматически в cookie)
         const response = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true });
         const { access_token } = response.data;
-        localStorage.setItem('access_token', access_token);
+        setAccessToken(access_token); // сохраняем в памяти
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return api(originalRequest);
       } catch (refreshError) {
-        localStorage.removeItem('access_token');
+        setAccessToken(null);
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

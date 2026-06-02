@@ -1,16 +1,13 @@
-import os
 from pydantic_settings import BaseSettings
-from dotenv import load_dotenv
+from pydantic import field_validator
 
-load_dotenv()
 
 class Settings(BaseSettings):
-    # PostgreSQL
-    DB_USER: str = os.getenv("DB_USER", "postgres")
-    DB_PASS: str = os.getenv("DB_PASS", "postgres")
-    DB_HOST: str = os.getenv("DB_HOST", "localhost")
-    DB_PORT: str = os.getenv("DB_PORT", "5432")
-    DB_NAME: str = os.getenv("DB_NAME", "clothing_store")
+    DB_USER: str = "postgres"
+    DB_PASS: str = "postgres"
+    DB_HOST: str = "localhost"
+    DB_PORT: str = "5432"
+    DB_NAME: str = "clothing_store"
 
     @property
     def POSTGRES_DB_URL(self) -> str:
@@ -20,31 +17,43 @@ class Settings(BaseSettings):
     def SYNC_POSTGRES_DB_URL(self) -> str:
         return f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "supersecret")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+    SECRET_KEY: str = "supersecret"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    RECAPTCHA_SITE_KEY: str = os.getenv("RECAPTCHA_SITE_KEY", "")
-    RECAPTCHA_SECRET_KEY: str = os.getenv("RECAPTCHA_SECRET_KEY", "")
+    RECAPTCHA_SITE_KEY: str = ""
+    RECAPTCHA_SECRET_KEY: str = ""
 
     # Celery
-    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
-    REDIS_URL: str = os.getenv("REDIS_URL")
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # ML
-    CATVTON_MODEL_PATH: str = os.getenv("CATVTON_MODEL_PATH", "/app/ml_models/catvton")
+    CATVTON_MODEL_PATH: str = "/app/ml_models/catvton"
 
-    TBANK_API_URL: str = os.getenv("TBANK_API_URL", "https://sandbox.tbank.ru/api")
-    TBANK_MERCHANT_ID: str = os.getenv("TBANK_MERCHANT_ID", "")
-    TBANK_SECRET_KEY: str = os.getenv("TBANK_SECRET_KEY", "")
+    TBANK_API_URL: str = "https://sandbox.tbank.ru/api"
+    TBANK_MERCHANT_ID: str = ""
+    TBANK_SECRET_KEY: str = ""
 
-    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
+    ALLOWED_ORIGINS: str = "http://localhost:5173"
 
-    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: str = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_origins(cls, v: str) -> list[str]:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
+
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
 
 settings = Settings()

@@ -9,14 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
-from app.users.models import User, UserSession
-from app.catalog.models import Category, Product, ProductImage, ProductSize, ProductColor, SizeChart
+from app.users.models import User
+from app.catalog.models import Category, Product, ProductSize, ProductColor, ProductVariant
 from app.cart.models import CartItem
-from app.orders.models import Address, Order, OrderItem, PaymentTransaction, Return
-from app.reviews.models import Review
-from app.notifications.models import Notification
 from app.wishlist.models import Wishlist
-from app.tryon.models import TryOnSession
+from app.reviews.models import Review
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,18 +37,13 @@ PRODUCTS = [
         "name": "Классическая рубашка",
         "slug": "classic-shirt",
         "description": "Хлопковая рубашка прямого кроя",
-        "price": 2990,
-        "old_price": None,
         "category_slug": "shirts",
         "brand": "Classic Look",
-        "sku": "CST1001",
         "is_active": True,
-        "sizes": [
-            {"size_label": "S", "sku_variant": "CST1001-S", "stock_quantity": 10},
-            {"size_label": "M", "sku_variant": "CST1001-M", "stock_quantity": 20},
-            {"size_label": "L", "sku_variant": "CST1001-L", "stock_quantity": 15},
-            {"size_label": "XL", "sku_variant": "CST1001-XL", "stock_quantity": 5},
-        ],
+        "base_sku": "CST1001",
+        "base_price": 2990,
+        "sizes": ["S", "M", "L", "XL"],
+        "size_stocks": {"S": 10, "M": 20, "L": 15, "XL": 5},
         "colors": [
             {"color_name": "Белый", "color_hex": "#FFFFFF"},
             {"color_name": "Синий", "color_hex": "#0000FF"},
@@ -65,18 +57,13 @@ PRODUCTS = [
         "name": "Платье летнее",
         "slug": "summer-dress",
         "description": "Легкое платье из вискозы",
-        "price": 3990,
-        "old_price": 4990,
         "category_slug": "dresses",
         "brand": "Summer Breeze",
-        "sku": "SDR1001",
         "is_active": True,
-        "sizes": [
-            {"size_label": "XS", "sku_variant": "SDR1001-XS", "stock_quantity": 5},
-            {"size_label": "S", "sku_variant": "SDR1001-S", "stock_quantity": 8},
-            {"size_label": "M", "sku_variant": "SDR1001-M", "stock_quantity": 7},
-            {"size_label": "L", "sku_variant": "SDR1001-L", "stock_quantity": 5},
-        ],
+        "base_sku": "SDR1001",
+        "base_price": 3990,
+        "sizes": ["XS", "S", "M", "L"],
+        "size_stocks": {"XS": 5, "S": 8, "M": 7, "L": 5},
         "colors": [
             {"color_name": "Розовый", "color_hex": "#FFC0CB"},
             {"color_name": "Желтый", "color_hex": "#FFFF00"},
@@ -90,21 +77,13 @@ PRODUCTS = [
         "name": "Кроссовки",
         "slug": "sport-sneakers",
         "description": "Удобные повседневные кроссовки",
-        "price": 4990,
-        "old_price": None,
         "category_slug": "sneakers",
         "brand": "Sportify",
-        "sku": "SNK1001",
         "is_active": True,
-        "sizes": [
-            {"size_label": "36", "sku_variant": "SNK1001-36", "stock_quantity": 5},
-            {"size_label": "37", "sku_variant": "SNK1001-37", "stock_quantity": 8},
-            {"size_label": "38", "sku_variant": "SNK1001-38", "stock_quantity": 10},
-            {"size_label": "39", "sku_variant": "SNK1001-39", "stock_quantity": 7},
-            {"size_label": "40", "sku_variant": "SNK1001-40", "stock_quantity": 5},
-            {"size_label": "41", "sku_variant": "SNK1001-41", "stock_quantity": 3},
-            {"size_label": "42", "sku_variant": "SNK1001-42", "stock_quantity": 2},
-        ],
+        "base_sku": "SNK1001",
+        "base_price": 4990,
+        "sizes": ["36", "37", "38", "39", "40", "41", "42"],
+        "size_stocks": {"36": 5, "37": 8, "38": 10, "39": 7, "40": 5, "41": 3, "42": 2},
         "colors": [
             {"color_name": "Черный", "color_hex": "#000000"},
             {"color_name": "Белый", "color_hex": "#FFFFFF"},
@@ -118,15 +97,13 @@ PRODUCTS = [
         "name": "Сумка кожаная",
         "slug": "leather-bag",
         "description": "Натуральная кожа, вместительная",
-        "price": 7990,
-        "old_price": 9990,
         "category_slug": "bags",
         "brand": "Luxury Wear",
-        "sku": "BAG1001",
         "is_active": True,
-        "sizes": [
-            {"size_label": "One size", "sku_variant": "BAG1001-OS", "stock_quantity": 10},
-        ],
+        "base_sku": "BAG1001",
+        "base_price": 7990,
+        "sizes": ["One size"],
+        "size_stocks": {"One size": 10},
         "colors": [
             {"color_name": "Коричневый", "color_hex": "#8B4513"},
             {"color_name": "Черный", "color_hex": "#000000"},
@@ -141,7 +118,7 @@ PRODUCTS = [
 USERS = [
     {
         "email": "admin@example.com",
-        "password": "admin123",
+        "password": "Admin123!",  # Сложный пароль для прохождения валидации
         "first_name": "Admin",
         "last_name": "User",
         "phone": "+79001234567",
@@ -150,7 +127,7 @@ USERS = [
     },
     {
         "email": "user@example.com",
-        "password": "user123",
+        "password": "User123!",
         "first_name": "Test",
         "last_name": "User",
         "phone": "+79007654321",
@@ -165,55 +142,53 @@ REVIEWS = [
 ]
 
 WISHLIST_ITEMS = [
-    {"product_slug": "sport-sneakers", "user_email": "user@example.com"},
+    {"product_slug": "sport-sneakers", "user_email": "user@example.com", "size": "38", "color": "Черный"},
 ]
 
 CART_ITEMS = [
-    {"product_slug": "classic-shirt", "user_email": "user@example.com", "quantity": 1, "size_label": "M", "color_name": "Белый"},
+    {"product_slug": "classic-shirt", "user_email": "user@example.com", "quantity": 1, "size": "M", "color": "Белый"},
 ]
+
 
 # ---------- Вспомогательные функции ----------
 async def get_category_by_slug(session: AsyncSession, slug: str) -> Optional[Category]:
     result = await session.execute(select(Category).where(Category.slug == slug))
     return result.scalar_one_or_none()
 
+
 async def get_product_by_slug(session: AsyncSession, slug: str) -> Optional[Product]:
     result = await session.execute(select(Product).where(Product.slug == slug))
     return result.scalar_one_or_none()
+
 
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
     result = await session.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()
 
-async def get_size_by_label(session: AsyncSession, product_id: int, size_label: str) -> Optional[ProductSize]:
-    result = await session.execute(
-        select(ProductSize).where(ProductSize.product_id == product_id, ProductSize.size_label == size_label)
-    )
+
+async def get_variant_by_sku(session: AsyncSession, sku: str) -> Optional[ProductVariant]:
+    result = await session.execute(select(ProductVariant).where(ProductVariant.sku == sku))
     return result.scalar_one_or_none()
 
-async def get_color_by_name(session: AsyncSession, product_id: int, color_name: str) -> Optional[ProductColor]:
-    result = await session.execute(
-        select(ProductColor).where(ProductColor.product_id == product_id, ProductColor.color_name == color_name)
-    )
-    return result.scalar_one_or_none()
 
 # ---------- Основная функция ----------
 async def init_db():
     logger.info("Начинаем заполнение базы тестовыми данными...")
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            # --- Категории (с parent_id) ---
+            # --- Категории ---
             category_map = {}
             for cat_data in CATEGORIES:
                 exists = await get_category_by_slug(session, cat_data["slug"])
                 if exists:
-                    logger.info(f"Категория {cat_data['name']} уже существует, пропускаем")
+                    logger.info(f"Категория {cat_data['name']} уже существует")
                     category_map[cat_data["slug"]] = exists
                     continue
 
                 parent = None
                 if cat_data["parent_slug"]:
                     parent = category_map.get(cat_data["parent_slug"]) or await get_category_by_slug(session, cat_data["parent_slug"])
+
                 category = Category(
                     name=cat_data["name"],
                     slug=cat_data["slug"],
@@ -224,43 +199,42 @@ async def init_db():
                 category_map[cat_data["slug"]] = category
                 logger.info(f"Добавлена категория: {cat_data['name']}")
 
-            # --- Товары ---
+            # --- Товары + Варианты ---
             for prod_data in PRODUCTS:
                 category = category_map.get(prod_data["category_slug"]) or await get_category_by_slug(session, prod_data["category_slug"])
                 if not category:
-                    logger.warning(f"Категория {prod_data['category_slug']} не найдена, пропускаем товар {prod_data['name']}")
+                    logger.warning(f"Категория {prod_data['category_slug']} не найдена")
                     continue
 
                 product = await get_product_by_slug(session, prod_data["slug"])
                 if product:
-                    logger.info(f"Товар {prod_data['name']} уже существует, пропускаем")
+                    logger.info(f"Товар {prod_data['name']} уже существует")
                     continue
 
                 product = Product(
                     name=prod_data["name"],
                     slug=prod_data["slug"],
                     description=prod_data.get("description"),
-                    price=prod_data["price"],
-                    old_price=prod_data.get("old_price"),
                     category_id=category.id,
                     brand=prod_data.get("brand"),
-                    sku=prod_data["sku"],
                     is_active=prod_data.get("is_active", True),
                 )
                 session.add(product)
                 await session.flush()
 
                 # Размеры
-                for size_data in prod_data.get("sizes", []):
+                size_objects = {}
+                for size_label in prod_data.get("sizes", []):
                     size = ProductSize(
                         product_id=product.id,
-                        size_label=size_data["size_label"],
-                        sku_variant=size_data["sku_variant"],
-                        stock_quantity=size_data["stock_quantity"],
+                        size_label=size_label,
                     )
                     session.add(size)
+                    await session.flush()
+                    size_objects[size_label] = size
 
                 # Цвета
+                color_objects = {}
                 for color_data in prod_data.get("colors", []):
                     color = ProductColor(
                         product_id=product.id,
@@ -268,6 +242,22 @@ async def init_db():
                         color_hex=color_data["color_hex"],
                     )
                     session.add(color)
+                    await session.flush()
+                    color_objects[color_data["color_name"]] = color
+
+                # ✅ Создаём варианты (каждая комбинация размер × цвет)
+                for size_label, size_obj in size_objects.items():
+                    for color_name, color_obj in color_objects.items():
+                        sku = f"{prod_data['base_sku']}-{size_label}-{color_name.replace(' ', '')}"
+                        variant = ProductVariant(
+                            product_id=product.id,
+                            size_id=size_obj.id,
+                            color_id=color_obj.id,
+                            sku=sku,
+                            stock_quantity=prod_data.get("size_stocks", {}).get(size_label, 0),
+                            price=prod_data["base_price"],
+                        )
+                        session.add(variant)
 
                 # Изображения
                 for img_data in prod_data.get("image_urls", []):
@@ -279,7 +269,8 @@ async def init_db():
                     )
                     session.add(img)
 
-                logger.info(f"Добавлен товар: {prod_data['name']}")
+                await session.flush()
+                logger.info(f"Добавлен товар: {prod_data['name']} с {len(size_objects) * len(color_objects)} вариантами")
 
             # --- Пользователи ---
             user_objects = {}
@@ -310,73 +301,92 @@ async def init_db():
                 product = await get_product_by_slug(session, rev_data["product_slug"])
                 user = user_objects.get(rev_data["user_email"])
                 if not product or not user:
-                    logger.warning(f"Не удалось создать отзыв: товар {rev_data['product_slug']} или пользователь {rev_data['user_email']} не найдены")
                     continue
 
-                # Проверяем, нет ли уже отзыва от этого пользователя на этот товар
                 stmt = select(Review).where(Review.product_id == product.id, Review.user_id == user.id)
                 result = await session.execute(stmt)
                 if result.scalar_one_or_none():
-                    logger.info(f"Отзыв от {user.email} на {product.name} уже есть")
                     continue
 
-                review = Review(
-                    product_id=product.id,
-                    user_id=user.id,
-                    rating=rev_data["rating"],
-                    comment=rev_data.get("comment"),
-                )
+                review = Review(product_id=product.id, user_id=user.id, rating=rev_data["rating"], comment=rev_data.get("comment"))
                 session.add(review)
                 logger.info(f"Добавлен отзыв от {user.email} на {product.name}")
 
-            # --- Список желаний ---
+            # --- Wishlist (используем variant_id) ---
             for wish_data in WISHLIST_ITEMS:
                 product = await get_product_by_slug(session, wish_data["product_slug"])
                 user = user_objects.get(wish_data["user_email"])
                 if not product or not user:
-                    logger.warning(f"Не удалось добавить в вишлист: товар {wish_data['product_slug']} или пользователь {wish_data['user_email']} не найдены")
                     continue
 
-                stmt = select(Wishlist).where(Wishlist.product_id == product.id, Wishlist.user_id == user.id)
+                # Формируем SKU варианта
+                size = wish_data.get("size", "")
+                color = wish_data.get("color", "").replace(" ", "")
+                variant_sku = f"{product.slug.upper().replace('-', '')}-{size}-{color}"
+
+                # Ищем первый доступный вариант товара (для простоты)
+                stmt = select(ProductVariant).where(ProductVariant.product_id == product.id)
+                result = await session.execute(stmt)
+                variant = result.scalars().first()
+
+                if not variant:
+                    logger.warning(f"Не найден вариант для wishlist: {product.name}")
+                    continue
+
+                stmt = select(Wishlist).where(Wishlist.variant_id == variant.id, Wishlist.user_id == user.id)
                 result = await session.execute(stmt)
                 if not result.scalar_one_or_none():
-                    wish = Wishlist(user_id=user.id, product_id=product.id)
+                    wish = Wishlist(user_id=user.id, variant_id=variant.id)
                     session.add(wish)
                     logger.info(f"Товар {product.name} добавлен в вишлист пользователя {user.email}")
 
-            # --- Корзина ---
+            # --- Корзина (используем variant_id) ---
             for cart_data in CART_ITEMS:
                 product = await get_product_by_slug(session, cart_data["product_slug"])
                 user = user_objects.get(cart_data["user_email"])
                 if not product or not user:
-                    logger.warning(f"Не удалось добавить в корзину: товар {cart_data['product_slug']} или пользователь {cart_data['user_email']} не найдены")
                     continue
 
-                size = None
-                if cart_data.get("size_label"):
-                    size = await get_size_by_label(session, product.id, cart_data["size_label"])
-                color = None
-                if cart_data.get("color_name"):
-                    color = await get_color_by_name(session, product.id, cart_data["color_name"])
+                # Ищем вариант по размеру и цвету
+                size = cart_data.get("size", "")
+                color = cart_data.get("color", "")
 
-                # Проверяем, есть ли уже такой товар в корзине
-                stmt = select(CartItem).where(
-                    CartItem.user_id == user.id,
-                    CartItem.product_id == product.id,
-                    CartItem.size_id == (size.id if size else None),
-                    CartItem.color_id == (color.id if color else None)
+                # Запрос для поиска варианта
+                stmt = (
+                    select(ProductVariant)
+                    .join(ProductSize)
+                    .join(ProductColor)
+                    .where(
+                        ProductVariant.product_id == product.id,
+                        ProductSize.size_label == size,
+                        ProductColor.color_name == color
+                    )
                 )
                 result = await session.execute(stmt)
+                variant = result.scalar_one_or_none()
+
+                if not variant:
+                    # Берём первый вариант, если не нашли конкретный
+                    stmt = select(ProductVariant).where(ProductVariant.product_id == product.id)
+                    result = await session.execute(stmt)
+                    variant = result.scalars().first()
+
+                if not variant:
+                    logger.warning(f"Не найден вариант для корзины: {product.name}")
+                    continue
+
+                # Проверяем существующую запись
+                stmt = select(CartItem).where(CartItem.user_id == user.id, CartItem.variant_id == variant.id)
+                result = await session.execute(stmt)
                 existing_item = result.scalar_one_or_none()
+
                 if existing_item:
-                    logger.info(f"Товар {product.name} уже в корзине пользователя {user.email}, увеличиваем количество")
                     existing_item.quantity += cart_data["quantity"]
+                    logger.info(f"Увеличено количество {product.name} в корзине")
                 else:
                     cart_item = CartItem(
                         user_id=user.id,
-                        product_id=product.id,
-                        size_id=size.id if size else None,
-                        color_id=color.id if color else None,
+                        variant_id=variant.id,
                         quantity=cart_data["quantity"],
                     )
                     session.add(cart_item)
@@ -384,8 +394,10 @@ async def init_db():
 
             logger.info("Заполнение базы данных успешно завершено!")
 
+
 def main():
     asyncio.run(init_db())
+
 
 if __name__ == "__main__":
     main()

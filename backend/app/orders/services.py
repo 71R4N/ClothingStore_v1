@@ -9,8 +9,6 @@ from uuid import UUID
 
 from app.orders.models import Order
 
-from app.orders.models import PaymentTransaction, Return
-
 from app.orders.schemas import OrderItemBase
 
 

@@ -22,23 +22,23 @@ class User(Base):
 
     # связи
     sessions: Mapped[List["UserSession"]] = relationship(back_populates="user")
-    addresses: Mapped[List["Address"]] = relationship(back_populates="user")
-    wishlist_items: Mapped[List["Wishlist"]] = relationship(back_populates="user")
+    wishlist_items: Mapped[List["Wishlist"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     cart_items: Mapped[List["CartItem"]] = relationship(back_populates="user")
-    reviews: Mapped[List["Review"]] = relationship(back_populates="user")
     orders: Mapped[List["Order"]] = relationship(back_populates="user")
-    notifications: Mapped[List["Notification"]] = relationship(back_populates="user")
     tryon_sessions: Mapped[List["TryOnSession"]] = relationship(back_populates="user")
 
 class UserSession(Base):
     __tablename__ = "user_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=False
+    )
     token: Mapped[str] = mapped_column(unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
-    # Определяем связь. Это скалярная связь (один к одному/многим к одному)
     user: Mapped["User"] = relationship(back_populates="sessions")
 

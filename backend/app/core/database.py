@@ -6,8 +6,9 @@ from fastapi import Depends
 from typing import Annotated, AsyncGenerator
 from datetime import datetime
 from sqlalchemy import MetaData
-from sqlalchemy.dialects.postgresql import UUID
-import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 POSTGRES_INDEXES_NAMING_CONVENTION = {
     "ix": "%(column_0_label)s_idx",
@@ -21,9 +22,18 @@ metadata = MetaData(naming_convention=POSTGRES_INDEXES_NAMING_CONVENTION)
 engine = create_async_engine(settings.POSTGRES_DB_URL)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Database session error: {e}")
+            raise
+        finally:
+            await session.close()
+
 
 SessionDbDep = Annotated[AsyncSession, Depends(get_db_session)]
 
@@ -31,16 +41,15 @@ SessionDbDep = Annotated[AsyncSession, Depends(get_db_session)]
 str_uniq = Annotated[str, mapped_column(unique=True)]
 CreatedAtCol = Annotated[datetime, mapped_column(server_default=func.now(), nullable=False)]
 
+
 class Base(DeclarativeBase):
     __abstract__ = True
     metadata = metadata
-    # id не задаём в базовом классе, чтобы каждая модель определяла свой тип
+
 
 from app.users.models import User, UserSession
-from app.catalog.models import Category, Product, ProductImage, ProductSize, ProductColor, SizeChart
+from app.catalog.models import Category, Product, ProductSize, ProductColor, ProductVariant
 from app.cart.models import CartItem
-from app.orders.models import Address, Order, OrderItem, PaymentTransaction, Return
-from app.reviews.models import Review
-from app.notifications.models import Notification
+from app.orders.models import Order, OrderItem
 from app.wishlist.models import Wishlist
 from app.tryon.models import TryOnSession

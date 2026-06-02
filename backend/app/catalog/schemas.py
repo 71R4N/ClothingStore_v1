@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
+
 # Category
 class CategoryBase(BaseModel):
     name: str
@@ -10,13 +11,16 @@ class CategoryBase(BaseModel):
     description: Optional[str] = None
     image_url: Optional[str] = None
 
+
 class CategoryCreate(CategoryBase):
     pass
+
 
 class CategoryRead(CategoryBase):
     id: int
     children: List["CategoryRead"] = []
     model_config = {"from_attributes": True}
+
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
@@ -25,55 +29,70 @@ class CategoryUpdate(BaseModel):
     description: Optional[str] = None
     image_url: Optional[str] = None
 
-# ProductImage
-class ProductImageBase(BaseModel):
-    url: str
-    alt_text: Optional[str] = None
-    is_main: bool = False
-    sort_order: int = 0
 
-class ProductImageRead(ProductImageBase):
-    id: int
-    model_config = {"from_attributes": True}
-
-# ProductSize
 class ProductSizeBase(BaseModel):
     size_label: str
     chest_cm: Optional[str] = None
     waist_cm: Optional[str] = None
     hips_cm: Optional[str] = None
-    stock_quantity: int = 0
-    sku_variant: str
+    label_size: Optional[str] = None
+    height_cm: Optional[str] = None
+
 
 class ProductSizeRead(ProductSizeBase):
     id: int
     model_config = {"from_attributes": True}
+
 
 # ProductColor
 class ProductColorBase(BaseModel):
     color_name: str
     color_hex: str
 
+
 class ProductColorRead(ProductColorBase):
     id: int
     model_config = {"from_attributes": True}
 
-# Product
+
+class ProductVariantBase(BaseModel):
+    color_id: int
+    size_id: int
+    sku: str
+    stock_quantity: int = 0
+    price: float
+    image_url: Optional[str] = None
+    attributes: Optional[dict] = None
+
+
+class ProductVariantCreate(ProductVariantBase):
+    pass
+
+
+class ProductVariantRead(ProductVariantBase):
+    id: int
+    product_id: int
+    color: Optional[ProductColorRead] = None
+    size: Optional[ProductSizeRead] = None
+    model_config = {"from_attributes": True}
+
+
 class ProductBase(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
-    price: float
-    old_price: Optional[float] = None
     category_id: int
     brand: Optional[str] = None
-    sku: str
+    brand_logo: Optional[str] = None
     is_active: bool = True
+
 
 class ProductCreate(ProductBase):
     images: Optional[List[ProductImageBase]] = []
     sizes: Optional[List[ProductSizeBase]] = []
     colors: Optional[List[ProductColorBase]] = []
+    variants: Optional[List[ProductVariantCreate]] = []
+
 
 class ProductRead(ProductBase):
     id: int
@@ -81,26 +100,15 @@ class ProductRead(ProductBase):
     images: List[ProductImageRead] = []
     sizes: List[ProductSizeRead] = []
     colors: List[ProductColorRead] = []
+    variants: List[ProductVariantRead] = []
     model_config = {"from_attributes": True}
+
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
     description: Optional[str] = None
-    price: Optional[float] = None
-    old_price: Optional[float] = None
     category_id: Optional[int] = None
     brand: Optional[str] = None
-    sku: Optional[str] = None
+    brand_logo: Optional[str] = None
     is_active: Optional[bool] = None
-
-# SizeChart
-class SizeChartBase(BaseModel):
-    category: str
-    region: str
-    size_mapping: dict
-
-class SizeChartRead(SizeChartBase):
-    id: int
-    model_config = {"from_attributes": True}
-    
