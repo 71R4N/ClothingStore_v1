@@ -14,7 +14,7 @@ function LoginPage() {
     setLoading(true);
     try {
       let captchaToken = null;
-      if (attempts >= 3) { // attempts — переменная, которую вы отслеживаете
+      if (attempts >= 3) {
         captchaToken = await executeRecaptcha('login');
       }
       await login(values.email, values.password, captchaToken);

@@ -24,10 +24,11 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
   const res = await authService.login(email, password);
-  // Сохраняем только access-токен. Refresh-токен уже в httpOnly cookie
-  localStorage.setItem('access_token', res.data.access_token);
+  // ❌ localStorage.setItem('access_token', res.data.access_token);
+  // ✅ храните access_token в state (у вас уже есть setUser)
   const userRes = await userService.getMe();
   setUser(userRes.data);
+  // Дополнительно: сохраните access_token в переменную (например, в authStore)
 };
 
 const register = async (data) => {
