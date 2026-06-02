@@ -65,3 +65,21 @@ shell:
 
 clean:
 	$(DOCKER_COMPOSE) down -v
+
+# Полный сброс БД и пересоздание миграций с нуля
+reset:
+	@echo "Останавливаю контейнеры и удаляю volumes..."
+	$(DOCKER_COMPOSE) down -v
+	@echo "Удаляю старые файлы миграций..."
+	rm -f backend/alembic/versions/*.py
+	@echo "Собираю и запускаю контейнеры..."
+	$(DOCKER_COMPOSE) up -d --build
+	@echo "Жду 5 секунд, пока Postgres полностью запустится..."
+	sleep 5
+	@echo "Генерирую начальную миграцию..."
+	$(DOCKER_COMPOSE) exec $(BACKEND_CONTAINER) alembic revision --autogenerate -m "initial schema"
+	@echo "Применяю миграции..."
+	$(DOCKER_COMPOSE) exec $(BACKEND_CONTAINER) alembic upgrade head
+	@echo "Загружаю начальные данные..."
+	$(DOCKER_COMPOSE) exec -T $(BACKEND_CONTAINER) python -m app.initial_data
+	@echo "База данных полностью сброшена и заполнена с нуля!"

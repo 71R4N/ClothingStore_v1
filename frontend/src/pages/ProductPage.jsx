@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { catalogService } from '../services/catalogService';
 import { useCart } from '../hooks/useCart';
@@ -9,73 +9,144 @@ const { Title, Text } = Typography;
 function ProductPage() {
   const { slug } = useParams();
   const [product, setProduct] = useState(null);
-  const [selectedSize, setSelectedSize] = useState(null);
-  const [selectedColor, setSelectedColor] = useState(null);
+  const [selectedSizeId, setSelectedSizeId] = useState(null);
+  const [selectedColorId, setSelectedColorId] = useState(null);
   const { addToCart } = useCart();
 
   useEffect(() => {
     catalogService.getProductBySlug(slug)
-      .then(res => setProduct(res.data))
+      .then(res => {
+        setProduct(res.data);
+        const firstAvailable = res.data.variants?.find(v => v.stock_quantity > 0);
+        if (firstAvailable) {
+          setSelectedSizeId(firstAvailable.size.id);
+          setSelectedColorId(firstAvailable.color.id);
+        }
+      })
       .catch(console.error);
   }, [slug]);
 
+  const selectedVariant = useMemo(() => {
+    if (!product || !selectedSizeId || !selectedColorId) return null;
+    return product.variants?.find(
+      v => v.size.id === selectedSizeId && v.color.id === selectedColorId
+    );
+  }, [product, selectedSizeId, selectedColorId]);
+
+  const minPrice = useMemo(() => {
+    if (!product?.variants?.length) return 0;
+    return Math.min(...product.variants.map(v => v.price));
+  }, [product]);
+
   if (!product) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
 
-  const mainImg = product.images?.find(i => i.is_main)?.url || product.images?.[0]?.url || 'https://via.placeholder.com/400';
+  const mainImg = selectedVariant?.image_url || product.variants?.[0]?.image_url || 'https://via.placeholder.com/400';
 
   const handleAddToCart = () => {
-    addToCart(product.id, selectedSize, selectedColor, 1);
+    if (!selectedVariant) return;
+    addToCart(selectedVariant.id, 1); 
+  };
+
+  const isSizeAvailable = (sizeId) => {
+    if (!selectedColorId) return true;
+    return product.variants.some(
+      v => v.size.id === sizeId && v.color.id === selectedColorId && v.stock_quantity > 0
+    );
   };
 
   return (
     <Row gutter={[24, 24]}>
       <Col xs={24} md={10}>
-        <Image src={mainImg} alt={product.name} />
-        <div style={{ marginTop: 16 }}>
-          {product.images?.filter(i => !i.is_main).map(img => (
-            <Image key={img.id} src={img.url} width={80} style={{ marginRight: 8 }} />
-          ))}
-        </div>
+        <Image src={mainImg} alt={product.name} style={{ width: '100%' }} />
       </Col>
       <Col xs={24} md={14}>
         <Title level={2}>{product.name}</Title>
         <Text type="secondary">{product.brand}</Text>
+        
         <div style={{ marginTop: 16 }}>
-          <Text strong style={{ fontSize: '1.8rem', marginRight: 16 }}>${product.price}</Text>
-          {product.old_price && <Text delete>${product.old_price}</Text>}
+          <Text strong style={{ fontSize: '1.8rem', marginRight: 16 }}>
+            {/* Показываем цену выбранного варианта или "от X" */}
+            {selectedVariant ? selectedVariant.price : `от ${minPrice}`} ₽
+          </Text>
         </div>
+        
         <div style={{ marginTop: 24 }}>
           <Title level={4}>Описание</Title>
           <Text>{product.description}</Text>
         </div>
+        
         <div style={{ marginTop: 24 }}>
-          <Space direction="vertical">
-            {product.sizes?.length > 0 && (
-              <Select
-                placeholder="Выберите размер"
-                style={{ width: 200 }}
-                onChange={setSelectedSize}
-              >
-                {product.sizes.map(s => (
-                  <Select.Option key={s.id} value={s.id} disabled={s.stock_quantity === 0}>
-                    {s.size_label} {s.stock_quantity === 0 ? '(нет)' : `(${s.stock_quantity})`}
-                  </Select.Option>
-                ))}
-              </Select>
-            )}
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            
+            {/* Выбор цвета */}
             {product.colors?.length > 0 && (
-              <Select
-                placeholder="Цвет"
-                style={{ width: 200 }}
-                onChange={setSelectedColor}
-              >
-                {product.colors.map(c => (
-                  <Select.Option key={c.id} value={c.id}>{c.color_name}</Select.Option>
-                ))}
-              </Select>
+              <div>
+                <Text strong>Цвет:</Text>
+                <Select
+                  placeholder="Выберите цвет"
+                  style={{ width: '100%', marginTop: 8 }}
+                  value={selectedColorId}
+                  onChange={(val) => {
+                    setSelectedColorId(val);
+                    if (!isSizeAvailable(selectedSizeId)) {
+                      setSelectedSizeId(null);
+                    }
+                  }}
+                >
+                  {product.colors.map(c => (
+                    <Select.Option key={c.id} value={c.id}>
+                      <Space>
+                        <div style={{ 
+                          width: 16, height: 16, 
+                          backgroundColor: c.color_hex, 
+                          borderRadius: '50%', 
+                          border: '1px solid #ccc',
+                          display: 'inline-block'
+                        }} />
+                        {c.color_name}
+                      </Space>
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
             )}
-            <Button type="primary" size="large" onClick={handleAddToCart} disabled={product.sizes?.length > 0 && !selectedSize}>
-              В корзину
+
+            {/* Выбор размера */}
+            {product.sizes?.length > 0 && (
+              <div>
+                <Text strong>Размер:</Text>
+                <Select
+                  placeholder="Выберите размер"
+                  style={{ width: '100%', marginTop: 8 }}
+                  value={selectedSizeId}
+                  onChange={setSelectedSizeId}
+                >
+                  {product.sizes.map(s => (
+                    <Select.Option key={s.id} value={s.id} disabled={!isSizeAvailable(s.id)}>
+                      {s.size_label} {!isSizeAvailable(s.id) && '(нет в наличии)'}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+            )}
+
+            {/* Информация о наличии */}
+            {selectedVariant && (
+              <Text type={selectedVariant.stock_quantity > 0 ? "success" : "danger"}>
+                {selectedVariant.stock_quantity > 0 
+                  ? `В наличии: ${selectedVariant.stock_quantity} шт.` 
+                  : 'Нет в наличии для выбранной комбинации'}
+              </Text>
+            )}
+
+            <Button 
+              type="primary" 
+              size="large" 
+              block
+              onClick={handleAddToCart} 
+              disabled={!selectedVariant || selectedVariant.stock_quantity === 0}
+            >
+              Добавить в корзину
             </Button>
           </Space>
         </div>

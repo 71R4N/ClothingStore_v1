@@ -40,14 +40,7 @@ class Settings(BaseSettings):
     TBANK_MERCHANT_ID: str = ""
     TBANK_SECRET_KEY: str = ""
 
-    ALLOWED_ORIGINS: str = "http://localhost:5173"
-
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_origins(cls, v: str) -> list[str]:
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:8000"
 
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

@@ -42,10 +42,12 @@ async def list_products(
     limit: int = Query(20, ge=1, le=100),
     category_id: Optional[int] = None,
     search: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    order: str = "asc"
+    min_price: Optional[float] = Query(None, ge=0),
+    max_price: Optional[float] = Query(None, ge=0),
+    sort_by: Optional[str] = Query(None, pattern="^(price|created_at)$"),
+    order: str = Query("asc", pattern="^(asc|desc)$")
 ):
-    return await service.get_products(skip, limit, category_id, search, sort_by, order)
+    return await service.get_products(skip, limit, category_id, search, min_price, max_price, sort_by, order)
 
 @router.get("/products/{slug}", response_model=ProductRead)
 async def get_product(slug: str, service: CatalogServiceDep):

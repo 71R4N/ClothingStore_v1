@@ -103,16 +103,12 @@ class CatalogService:
         return prod
 
     async def get_products(
-        self,
-        skip: int = 0,
-        limit: int = 20,
-        category_id: Optional[int] = None,
-        search: Optional[str] = None,
-        sort_by: Optional[str] = None,
-        order: str = "asc"
+            self, skip: int = 0, limit: int = 20, category_id: Optional[int] = None,
+            search: Optional[str] = None, min_price: Optional[float] = None,
+            max_price: Optional[float] = None, sort_by: Optional[str] = None, order: str = "asc"
     ):
         return await self.product_repo.read_all_with_relations(
-            skip, limit, category_id, search, sort_by, order
+            skip, limit, category_id, search, min_price, max_price, sort_by, order
         )
 
     async def update_product(self, product_id: int, data: ProductUpdate):

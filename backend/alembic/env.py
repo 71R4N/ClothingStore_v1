@@ -6,15 +6,12 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.config import settings
 from app.core.database import Base
-# Импортируем все модели, чтобы Alembic их видел
 from app.users.models import User, UserSession
-from app.catalog.models import Category, Product, ProductImage, ProductSize, ProductColor, SizeChart
+from app.catalog.models import Category, Product, ProductSize, ProductColor, ProductVariant
 from app.cart.models import CartItem
-from app.orders.models import Address, Order, OrderItem, PaymentTransaction, Return
-from app.tryon.models import TryOnSession
-from app.reviews.models import Review
-from app.notifications.models import Notification
+from app.orders.models import Order, OrderItem
 from app.wishlist.models import Wishlist
+from app.tryon.models import TryOnSession
 
 config = context.config
 fileConfig(config.config_file_name)
