@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Typography, Radio } from 'antd';
+import { Form, Input, Button, Typography, Alert } from 'antd';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
 import { orderService } from '../services/orderService';
@@ -8,46 +8,85 @@ import { useNavigate } from 'react-router-dom';
 const { Title } = Typography;
 
 function CheckoutPage() {
-  const { items, total, clearCart } = useCart();
+  const { items, total } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const onFinish = async (values) => {
+    if (items.length === 0) {
+      setError("Ваша корзина пуста");
+      return;
+    }
     setLoading(true);
+    setError(null);
+    
     const orderData = {
       guest_email: user ? undefined : values.email,
-      shipping_address_id: null,
-      payment_method: values.payment_method,
-      items: items.map(i => ({ product_id: i.product_id, size_id: i.size_id, color_id: i.color_id, quantity: i.quantity, price_at_purchase: i.price }))
+      street: values.street,
+      city: values.city,
     };
+    
     try {
       const res = await orderService.createOrder(orderData);
-      clearCart();
       navigate(`/orders?success=${res.data.id}`);
     } catch (e) {
       console.error(e);
+      setError(e.response?.data?.detail || "Ошибка при создании заказа. Проверьте наличие товаров.");
     } finally {
       setLoading(false);
     }
   };
 
+  if (items.length === 0 && !loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <Title level={3}>Ваша корзина пуста</Title>
+        <Button type="primary" onClick={() => navigate('/catalog')}>Перейти к покупкам</Button>
+      </div>
+    );
+  }
+
   return (
     <>
       <Title level={2}>Оформление заказа</Title>
-      <Form layout="vertical" onFinish={onFinish}>
-        {!user && <Form.Item label="Email" name="email" rules={[{ required: true, type: 'email' }]}>
-          <Input />
-        </Form.Item>}
-        <Form.Item label="Способ оплаты" name="payment_method" initialValue="card">
-          <Radio.Group>
-            <Radio value="card">Банковская карта</Radio>
-            <Radio value="tbank">Т-Банк</Radio>
-          </Radio.Group>
+      
+      {error && <Alert message={error} type="error" showIcon style={{ marginBottom: 24 }} />}
+
+      <Form layout="vertical" onFinish={onFinish} style={{ maxWidth: 600 }}>
+        {!user && (
+          <Form.Item 
+            label="Email (для чека и уведомлений)" 
+            name="email" 
+            rules={[{ required: true, type: 'email', message: 'Введите корректный email' }]}
+          >
+            <Input size="large" />
+          </Form.Item>
+        )}
+        
+        <Form.Item 
+          label="Город" 
+          name="city" 
+          rules={[{ required: true, message: 'Укажите город' }]}
+        >
+          <Input size="large" placeholder="Москва" />
         </Form.Item>
-        <div style={{ fontSize: '1.2rem', marginBottom: 24 }}>Итого к оплате: ${total.toFixed(2)}</div>
-        <Button type="primary" htmlType="submit" loading={loading} size="large">
-          Оплатить
+
+        <Form.Item 
+          label="Улица, дом и квартира" 
+          name="street" 
+          rules={[{ required: true, message: 'Укажите адрес доставки' }]}
+        >
+          <Input size="large" placeholder="ул. Пушкина, д. 10, кв. 5" />
+        </Form.Item>
+
+        <div style={{ fontSize: '1.4rem', fontWeight: 'bold', marginBottom: 24, padding: '16px', background: '#f5f5f5', borderRadius: 8 }}>
+          Итого к оплате: {total.toFixed(2)} ₽
+        </div>
+        
+        <Button type="primary" htmlType="submit" loading={loading} size="large" block>
+          Подтвердить заказ
         </Button>
       </Form>
     </>

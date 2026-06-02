@@ -1,4 +1,3 @@
-/* frontend/src/index.css */
 @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap');
 
 * {
@@ -13,13 +12,11 @@ body {
   color: #1a1a1a;
 }
 
-/* Убираем стандартные отступы у Ant Design */
 .ant-layout-header,
 .ant-layout-footer {
   padding: 0;
 }
 
-/* Кастомные анимации */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -35,7 +32,6 @@ body {
   animation: fadeInUp 0.5s ease-out;
 }
 
-/* Стили для скролла */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -48,4 +44,27 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+button {
+  cursor: pointer;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+:focus-visible {
+  outline: 2px solid #1890ff;
+  outline-offset: 2px;
 }

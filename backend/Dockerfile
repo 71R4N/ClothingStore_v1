@@ -16,5 +16,6 @@ RUN poetry config virtualenvs.create false && poetry install --without dev --no-
 COPY . .
 
 RUN mkdir -p /app/static/tryon_results && chmod -R 777 /app/static/tryon_results
+RUN mkdir -p /app/static/uploads && chmod -R 777 /app/static/uploads
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

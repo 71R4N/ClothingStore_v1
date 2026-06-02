@@ -43,6 +43,7 @@ services:
         condition: service_healthy
     volumes:
       - ../backend:/app
+      - uploads:/app/static/uploads
       - tryon_results:/app/static/tryon_results
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
@@ -67,6 +68,7 @@ services:
         condition: service_healthy
     volumes:
       - ../backend:/app
+      - uploads:/app/static/uploads
       - tryon_results:/app/static/tryon_results
 
   celery-beat:
