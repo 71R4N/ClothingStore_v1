@@ -30,6 +30,7 @@ function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [categories, setCategories] = useState([]);
 
+  // Загружаем категории
   useEffect(() => {
     catalogService.getCategories()
       .then(res => setCategories(res.data || []))
@@ -37,15 +38,16 @@ function Layout({ children }) {
   }, []);
 
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
-  const wishlistCount = wishlistItems.length;
+  const wishlistCount = wishlistItems ? wishlistItems.length : 0;
 
-  // Определение активного пункта меню
+  // Определение активного пункта
   const getSelectedKey = () => {
     const path = location.pathname;
     if (path === '/') return 'home';
     if (path.startsWith('/catalog') || path.startsWith('/product')) return 'catalog';
     if (path.startsWith('/try-on')) return 'tryon';
     if (path.startsWith('/orders')) return 'orders';
+    if (path.startsWith('/wishlist')) return 'wishlist'; // Добавили ключ для избранного
     return '';
   };
 
@@ -59,9 +61,13 @@ function Layout({ children }) {
     })) : undefined,
   }));
 
-  // Основные пункты меню
+  // Основные пункты меню с БЕЛЫМ цветом
   const mainMenuItems = [
-    { key: 'home', icon: <HomeOutlined />, label: <Link to="/">Главная</Link> },
+    { 
+      key: 'home', 
+      icon: <HomeOutlined />, 
+      label: <Link to="/" style={{ color: '#fff' }}>Главная</Link> 
+    },
     { 
       key: 'catalog', 
       icon: <ShopOutlined />, 
@@ -71,23 +77,27 @@ function Layout({ children }) {
           trigger={['hover']}
           overlayStyle={{ maxHeight: 400, overflowY: 'auto' }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#fff' }}>
             Каталог <DownOutlined style={{ fontSize: 10 }} />
           </span>
         </Dropdown>
       ),
     },
-    { key: 'tryon', icon: <ExperimentOutlined />, label: <Link to="/try-on">Примерка</Link> },
+    { 
+      key: 'tryon', 
+      icon: <ExperimentOutlined />, 
+      label: <Link to="/try-on" style={{ color: '#fff' }}>Примерка</Link> 
+    },
   ];
 
   const handleMenuClick = () => {
     setMobileMenuOpen(false);
   };
 
-  // Десктопное меню
+  // Десктопное меню с прозрачным фоном и белым текстом
   const renderDesktopMenu = () => (
     <Menu 
-      theme="light" 
+      theme="dark" 
       mode="horizontal" 
       selectedKeys={[getSelectedKey()]}
       items={mainMenuItems} 
@@ -95,10 +105,32 @@ function Layout({ children }) {
         background: 'transparent', 
         borderBottom: 'none',
         flex: 1,
-      }} 
+        lineHeight: '64px', // Выравнивание по высоте хедера
+      }}
+      // Переопределяем цвета Ant Design для белого текста и прозрачного фона
+      themeConfig={{
+        token: {
+          colorBgContainer: 'transparent',
+          colorText: '#fff',
+          colorPrimary: '#1890ff',
+        },
+        components: {
+          Menu: {
+            itemColor: 'rgba(255, 255, 255, 0.85)',
+            itemHoverColor: '#fff',
+            itemSelectedColor: '#fff',
+            itemBg: 'transparent',
+            itemHoverBg: 'rgba(255, 255, 255, 0.1)',
+            itemSelectedBg: 'transparent',
+            horizontalItemSelectedColor: '#fff',
+            horizontalItemSelectedBg: 'transparent',
+          }
+        }
+      }}
     />
   );
 
+  // Мобильное меню
   const renderMobileMenu = () => {
     const categoryItems = categories.flatMap(cat => [
       { 
@@ -136,6 +168,11 @@ function Layout({ children }) {
           key: 'orders', 
           icon: <OrderedListOutlined />, 
           label: <Link to="/orders" onClick={handleMenuClick}>Мои заказы</Link> 
+        },
+        { 
+            key: 'wishlist', 
+            icon: <HeartOutlined />, 
+            label: <Link to="/wishlist" onClick={handleMenuClick}>Избранное</Link> 
         },
         { type: 'divider' },
         { 
@@ -178,8 +215,10 @@ function Layout({ children }) {
         zIndex: 100,
         boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
         height: 64,
+        display: 'flex',
+        alignItems: 'center',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           
           {/* Логотип */}
           <div
@@ -192,6 +231,7 @@ function Layout({ children }) {
             </Title>
           </div>
 
+          {/* Десктопное меню */}
           {!isMobile && (
             <div style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: 600 }}>
               {renderDesktopMenu()}
@@ -272,6 +312,7 @@ function Layout({ children }) {
         </div>
       </Header>
 
+      {/* ===== МОБИЛЬНОЕ МЕНЮ ===== */}
       <Drawer
         placement="left"
         open={mobileMenuOpen}

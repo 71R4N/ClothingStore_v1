@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Response, Cookie
 from app.wishlist.schemas import WishlistCreate, WishlistRead
 from app.wishlist.dependencies import WishlistServiceDep
 from app.auth.dependencies import OptionalUserDep, CurrentUserDep
+from uuid import UUID
 
 
 router = APIRouter(prefix="/wishlist", tags=["wishlist"])
@@ -52,7 +53,7 @@ async def add_to_wishlist(
 
 @router.delete("/items/{variant_id}", status_code=204)
 async def remove_from_wishlist(
-        variant_id: int,
+        variant_id: UUID,
         request: Request,
         current_user: OptionalUserDep,
         wishlist_svc: WishlistServiceDep,

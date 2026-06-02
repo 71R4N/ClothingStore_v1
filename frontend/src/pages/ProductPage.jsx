@@ -156,6 +156,9 @@ function ProductPage() {
             >
               {isInWishlist(selectedVariant?.id) ? 'В избранном' : 'В избранное'}
             </Button>
+            <Button onClick={() => navigate(`/try-on?variant=${selectedVariant.id}&product=${product.slug}`)}>
+              Примерить
+            </Button>
             <Button 
               type="primary" 
               size="large" 

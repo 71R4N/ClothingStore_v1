@@ -2,6 +2,9 @@ from app.cart.repositories import CartRepo
 from app.catalog.repositories import ProductVariantRepo
 from app.cart.schemas import CartItemCreate, CartItemUpdate
 from app.cart.exceptions import CartItemNotFoundError, OutOfStockError
+from app.catalog.models import ProductVariant
+from sqlalchemy.orm import selectinload
+from sqlalchemy import select
 from typing import Optional
 from uuid import UUID
 
@@ -31,12 +34,24 @@ class CartService:
             if variant.stock_quantity < new_quantity:
                 raise OutOfStockError()
             update_schema = CartItemUpdate(quantity=new_quantity)
-            return await self.cart_repo.update(update_schema, existing.id, exclude_unset=True)
+            updated_item = await self.cart_repo.update(update_schema, existing.id, exclude_unset=True)
+            item_id = updated_item.id
         else:
             item_data = data.model_dump()
             item_data["user_id"] = user_id
             item_data["session_id"] = session_id
-            return await self.cart_repo.create_item(**item_data)
+            created_item = await self.cart_repo.create_item(**item_data)
+            item_id = created_item.id
+
+        stmt = select(self.cart_repo.model).where(
+            self.cart_repo.model.id == item_id
+        ).options(
+            selectinload(self.cart_repo.model.variant).selectinload(ProductVariant.product),
+            selectinload(self.cart_repo.model.variant).selectinload(ProductVariant.color),
+            selectinload(self.cart_repo.model.variant).selectinload(ProductVariant.size),
+        )
+        result = await self.cart_repo.session.execute(stmt)
+        return result.scalar_one()
 
     async def get_cart(self, user_id: Optional[UUID], session_id: Optional[str]) -> list:
         if user_id:
@@ -55,7 +70,17 @@ class CartService:
             raise OutOfStockError()
 
         update = CartItemUpdate(quantity=quantity)
-        return await self.cart_repo.update(update, item_id, exclude_unset=True)
+        await self.cart_repo.update(update, item_id, exclude_unset=True)
+
+        stmt = select(self.cart_repo.model).where(
+            self.cart_repo.model.id == item_id
+        ).options(
+            selectinload(self.cart_repo.model.variant).selectinload(ProductVariant.product),
+            selectinload(self.cart_repo.model.variant).selectinload(ProductVariant.color),
+            selectinload(self.cart_repo.model.variant).selectinload(ProductVariant.size),
+        )
+        result = await self.cart_repo.session.execute(stmt)
+        return result.scalar_one()
 
     async def remove_item(self, item_id: UUID):
         await self.cart_repo.delete(item_id)
