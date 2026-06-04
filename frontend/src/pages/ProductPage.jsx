@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom'; // ✅ Добавлен useNavigate
 import { catalogService } from '../services/catalogService';
 import { useCart } from '../hooks/useCart';
 import { useWishlist } from '../hooks/useWishlist';
 import { HeartOutlined, HeartFilled } from '@ant-design/icons';
-import { Typography, Button, Image, Select, Row, Col, Space, Spin } from 'antd';
+import { Typography, Button, Image, Select, Row, Col, Space, Spin, message } from 'antd'; // ✅ Добавлен message
 
 const { Title, Text } = Typography;
 
 function ProductPage() {
   const { slug } = useParams();
+  const navigate = useNavigate(); // ✅ Инициализация навигатора
   const [product, setProduct] = useState(null);
   const [selectedSizeId, setSelectedSizeId] = useState(null);
   const [selectedColorId, setSelectedColorId] = useState(null);
@@ -45,9 +46,15 @@ function ProductPage() {
 
   const mainImg = selectedVariant?.image_url || product.variants?.[0]?.image_url || 'https://via.placeholder.com/400';
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!selectedVariant) return;
-    addToCart(selectedVariant.id, 1); 
+    try {
+      await addToCart(selectedVariant.id, 1); 
+      message.success('Товар добавлен в корзину'); // ✅ Уведомление
+    } catch (e) {
+      console.error(e);
+      message.error(e.response?.data?.detail || 'Ошибка добавления в корзину');
+    }
   };
 
   const isSizeAvailable = (sizeId) => {
@@ -68,7 +75,6 @@ function ProductPage() {
         
         <div style={{ marginTop: 16 }}>
           <Text strong style={{ fontSize: '1.8rem', marginRight: 16 }}>
-            {/* Показываем цену выбранного варианта или "от X" */}
             {selectedVariant ? selectedVariant.price : `от ${minPrice}`} ₽
           </Text>
         </div>
@@ -156,9 +162,16 @@ function ProductPage() {
             >
               {isInWishlist(selectedVariant?.id) ? 'В избранном' : 'В избранное'}
             </Button>
-            <Button onClick={() => navigate(`/try-on?variant=${selectedVariant.id}&product=${product.slug}`)}>
-              Примерить
+            
+            {/* ✅ Исправленная кнопка примерки */}
+            <Button 
+              onClick={() => navigate(`/try-on?variant=${selectedVariant.id}&product=${product.slug}`)}
+              disabled={!selectedVariant}
+              size="large"
+            >
+              ✨ Примерить
             </Button>
+
             <Button 
               type="primary" 
               size="large" 

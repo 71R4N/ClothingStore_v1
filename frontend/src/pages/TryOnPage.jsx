@@ -34,6 +34,7 @@ function TryOnPage() {
 
   // Загрузка данных товара и варианта
   useEffect(() => {
+    console.log('TryOnPage mounted', { variantIdParam, productSlugParam });
     if (!variantIdParam && !productSlugParam) {
       message.warning('Пожалуйста, выберите товар для примерки из каталога');
       return;

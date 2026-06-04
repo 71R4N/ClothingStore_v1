@@ -47,7 +47,7 @@ function Layout({ children }) {
     if (path.startsWith('/catalog') || path.startsWith('/product')) return 'catalog';
     if (path.startsWith('/try-on')) return 'tryon';
     if (path.startsWith('/orders')) return 'orders';
-    if (path.startsWith('/wishlist')) return 'wishlist'; // Добавили ключ для избранного
+    if (path.startsWith('/wishlist')) return 'wishlist';
     return '';
   };
 
@@ -61,32 +61,29 @@ function Layout({ children }) {
     })) : undefined,
   }));
 
-  // Основные пункты меню с БЕЛЫМ цветом
+  // ✅ ИСПРАВЛЕНО: Убраны иконки из десктопного меню для идеального выравнивания
   const mainMenuItems = [
     { 
       key: 'home', 
-      icon: <HomeOutlined />, 
-      label: <Link to="/" style={{ color: '#fff' }}>Главная</Link> 
+      label: <Link to="/" className="nav-link">Главная</Link> 
     },
     { 
       key: 'catalog', 
-      icon: <ShopOutlined />, 
       label: (
         <Dropdown 
           menu={{ items: categoryMenuItems }} 
           trigger={['hover']}
           overlayStyle={{ maxHeight: 400, overflowY: 'auto' }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#fff' }}>
-            Каталог <DownOutlined style={{ fontSize: 10 }} />
+          <span className="nav-link" style={{ cursor: 'pointer' }}>
+            Каталог <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
           </span>
         </Dropdown>
       ),
     },
     { 
       key: 'tryon', 
-      icon: <ExperimentOutlined />, 
-      label: <Link to="/try-on" style={{ color: '#fff' }}>Примерка</Link> 
+      label: <Link to="/try-on" className="nav-link">Примерка</Link> 
     },
   ];
 
@@ -94,20 +91,19 @@ function Layout({ children }) {
     setMobileMenuOpen(false);
   };
 
-  // Десктопное меню с прозрачным фоном и белым текстом
+  // Десктопное меню
   const renderDesktopMenu = () => (
     <Menu 
       theme="dark" 
       mode="horizontal" 
       selectedKeys={[getSelectedKey()]}
       items={mainMenuItems} 
+      className="desktop-menu"
       style={{ 
         background: 'transparent', 
         borderBottom: 'none',
         flex: 1,
-        lineHeight: '64px', // Выравнивание по высоте хедера
       }}
-      // Переопределяем цвета Ant Design для белого текста и прозрачного фона
       themeConfig={{
         token: {
           colorBgContainer: 'transparent',
@@ -124,13 +120,14 @@ function Layout({ children }) {
             itemSelectedBg: 'transparent',
             horizontalItemSelectedColor: '#fff',
             horizontalItemSelectedBg: 'transparent',
+            itemPaddingInline: '16px', 
           }
         }
       }}
     />
   );
 
-  // Мобильное меню
+  // Мобильное меню (иконки оставлены для удобства на маленьких экранах)
   const renderMobileMenu = () => {
     const categoryItems = categories.flatMap(cat => [
       { 
@@ -221,25 +218,22 @@ function Layout({ children }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           
           {/* Логотип */}
-          <div
-            onClick={() => navigate('/')}
-            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-          >
+          <div onClick={() => navigate('/')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, marginRight: 48 }}>
             <ExperimentOutlined style={{ fontSize: 28, color: '#1890ff' }} />
-            <Title level={3} style={{ margin: 0, color: '#fff', letterSpacing: '-0.5px' }}>
-              CatVTON
-            </Title>
+              <Title level={3} style={{ margin: 0, color: '#fff', letterSpacing: '-0.5px', lineHeight: '64px' }}>
+                CatVTON
+              </Title>
           </div>
 
-          {/* Десктопное меню */}
+          {/* Меню по центру */}
           {!isMobile && (
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: 600 }}>
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
               {renderDesktopMenu()}
             </div>
           )}
 
           {/* Правая часть: корзина, избранное, профиль */}
-          <Space size={isMobile ? 8 : 16}>
+          <Space size={isMobile ? 8 : 24} align="center">
             {/* Избранное */}
             <Badge 
               count={wishlistCount} 
