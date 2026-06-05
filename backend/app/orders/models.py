@@ -1,10 +1,19 @@
 import uuid
-from sqlalchemy import ForeignKey, Integer, String, Numeric
+import enum
+from sqlalchemy import ForeignKey, String, Numeric, Enum as SAEnum, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base, CreatedAtCol
 from datetime import datetime
 from typing import List, Optional
+
+
+class OrderStatus(str, enum.Enum):
+    PENDING = "pending"           # Ожидает оплаты
+    PROCESSING = "processing"     # Оплачен, собирается на складе
+    SHIPPED = "shipped"           # Передан в службу доставки
+    DELIVERED = "delivered"       # Доставлен клиенту
+    CANCELLED = "cancelled"       # Отменён
 
 
 class Order(Base):
@@ -17,7 +26,12 @@ class Order(Base):
         nullable=True
     )
     guest_email: Mapped[Optional[str]] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(50), default="pending")
+    status: Mapped[OrderStatus] = mapped_column(
+        SAEnum(OrderStatus, name="order_status_enum", create_constraint=True),
+        default=OrderStatus.PENDING,
+        nullable=False
+    )
+
     street: Mapped[Optional[str]] = mapped_column(String(255))
     city: Mapped[Optional[str]] = mapped_column(String(100))
     total: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
@@ -29,11 +43,11 @@ class Order(Base):
 
     user: Mapped[Optional["User"]] = relationship("User", back_populates="orders")
     items: Mapped[List["OrderItem"]] = relationship(
-        "OrderItem",
-        back_populates="order",
-        cascade="all, delete-orphan"
+        "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
-
+    payments: Mapped[List["Payment"]] = relationship(
+        "Payment", back_populates="order", cascade="all, delete-orphan"
+    )
 
 class OrderItem(Base):
     __tablename__ = "order_items"

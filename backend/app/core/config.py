@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -30,22 +29,18 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    YOOKASSA_SHOP_ID: str = ""
+    YOOKASSA_SECRET_KEY: str = ""
+    YOOKASSA_RETURN_URL: str = "http://localhost:5173/payment/status"
+    YOOKASSA_CANCEL_URL: str = "http://localhost:5173/payment/status"
+
     # CatVTON
     CATVTON_API_URL: str = "http://localhost:8001"
     CATVTON_TIMEOUT: int = 300
     CATVTON_ENABLED: bool = False
     CATVTON_FALLBACK_IMAGE: str = "/static/images/tryon_fallback.png"
 
-    TBANK_API_URL: str = "https://sandbox.tbank.ru/api"
-    TBANK_MERCHANT_ID: str = ""
-    TBANK_SECRET_KEY: str = ""
-
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:8000"
-
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
 
     class Config:
         env_file = ".env"

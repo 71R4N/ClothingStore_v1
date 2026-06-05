@@ -30,58 +30,65 @@ class OrderService:
             session_id: Optional[str],
             data: OrderCreate
     ) -> Order:
-        # Получаем корзину
+        # 1. Получаем корзину
         cart_items = await self.cart_service.get_cart(user_id, session_id)
         if not cart_items:
             raise ValueError("Cart is empty")
 
-        # Проверяем наличие всех вариантов и вычисляем сумму
+        # 2. Проверяем наличие всех вариантов и вычисляем сумму
         total = 0.0
         validated_items = []
-
         for cart_item in cart_items:
             variant = await self.variant_repo.read_by_id(cart_item.variant_id)
             if not variant:
                 raise ValueError(f"Variant {cart_item.variant_id} not found")
             if variant.stock_quantity < cart_item.quantity:
                 raise ValueError(f"Insufficient stock for variant {variant.sku}")
+
             item_total = float(variant.price) * cart_item.quantity
             total += item_total
-
             validated_items.append({
                 "variant_id": cart_item.variant_id,
                 "quantity": cart_item.quantity,
-                "price_at_purchase": float(variant.price)
+                "price_at_purchase": float(variant.price),
+                "variant": variant  # Сохраняем ссылку на объект для оптимизации обновления остатков
             })
 
-        # Создаём заказ
-        order_data = data.model_dump()
-        order_data["user_id"] = user_id
-        order_data["total"] = total
-        order_data["status"] = "pending"
+        # 3. Создаём заказ напрямую через ORM-модель, минуя Pydantic-схему OrderCreate
+        order = Order(
+            user_id=user_id,
+            guest_email=data.guest_email,
+            street=data.street,
+            city=data.city,
+            total=total,
+            status="pending"
+        )
+        self.order_repo.session.add(order)
+        await self.order_repo.session.flush()  # Фиксируем для генерации и получения order.id
 
-        order = await self.order_repo.create(OrderCreate(**order_data))
-
-        # Создаём элементы заказа
+        # 4. Создаём позиции заказа (OrderItem)
         for item_data in validated_items:
             order_item = OrderItem(
-                order_id=order,
+                order_id=order.id,
                 variant_id=item_data["variant_id"],
                 quantity=item_data["quantity"],
                 price_at_purchase=item_data["price_at_purchase"]
             )
-            await self.order_item_repo.create(order_item)
+            self.order_repo.session.add(order_item)
 
+        # 5. Уменьшаем остатки на складе
         for item_data in validated_items:
-            variant = await self.variant_repo.read_by_id(item_data["variant_id"])
+            variant = item_data["variant"]
             variant.stock_quantity -= item_data["quantity"]
-            await self.variant_repo.update(variant, variant.id)
 
-        # Очищаем корзину
+        # 6. Очищаем корзину пользователя/гостя
         await self.cart_service.clear_cart(user_id, session_id)
 
-        # Возвращаем заказ с подгруженными items
-        return await self.get_order(order)
+        # 7. Коммитим единую транзакцию
+        await self.order_repo.session.commit()
+
+        # 8. Возвращаем заказ с жадно подгруженными связями (items, variants)
+        return await self.get_order(order.id)
 
     async def get_order(self, order_id: UUID) -> Order:
         order = await self.order_repo.get_with_items(order_id)

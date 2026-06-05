@@ -26,6 +26,6 @@ celery.conf.beat_schedule = {
     "cleanup-old-tryon-results": {
         "task": "worker.tasks.cleanup.cleanup_old_tryon_results",
         "schedule": 3600.0,
-        "args": (24,),  # Удалять файлы старше 24 часов
+        "args": (24,),
     },
 }

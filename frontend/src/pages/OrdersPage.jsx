@@ -41,12 +41,12 @@ function OrdersPage() {
       dataIndex: 'status',
       key: 'status',
       render: (status) => {
-        const colorMap = { 
-          pending: 'blue', 
-          processing: 'orange', 
-          shipped: 'cyan', 
-          delivered: 'green', 
-          cancelled: 'red' 
+        const colorMap = {
+          pending: 'blue',
+          processing: 'orange',
+          shipped: 'cyan',
+          delivered: 'green',
+          cancelled: 'red'
         };
         const textMap = {
           pending: 'Ожидает обработки',
@@ -70,10 +70,10 @@ function OrdersPage() {
   return (
     <div>
       <Title level={2}>Мои заказы</Title>
-      <Table 
-        dataSource={orders} 
-        columns={columns} 
-        rowKey="id" 
+      <Table
+        dataSource={orders}
+        columns={columns}
+        rowKey="id"
         loading={loading}
         locale={{ emptyText: 'У вас пока нет заказов' }}
       />
