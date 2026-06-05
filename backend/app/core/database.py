@@ -53,3 +53,4 @@ from app.cart.models import CartItem
 from app.orders.models import Order, OrderItem
 from app.wishlist.models import Wishlist
 from app.tryon.models import TryOnSession
+from app.payments.models import Payment

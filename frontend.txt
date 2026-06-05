@@ -2931,7 +2931,6 @@ import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from './components/ProtectedRoute';
-
 import HomePage from './pages/HomePage';
 import CatalogPage from './pages/CatalogPage';
 import ProductPage from './pages/ProductPage';
@@ -2945,60 +2944,63 @@ import OrderDetailPage from './pages/OrderDetailPage';
 import TryOnPage from './pages/TryOnPage';
 import NotFoundPage from './pages/NotFoundPage';
 import WishlistPage from './pages/WishlistPage';
+import PaymentStatusPage from './pages/PaymentStatusPage';
 
 function App() {
-  return (
-    <>
-      <ScrollToTop />
-      <Layout>
-        <Routes>
-          {/* Публичные страницы */}
-          <Route path="/" element={<HomePage />} />
-          <Route path="/catalog" element={<CatalogPage />} />
-          <Route path="/product/:slug" element={<ProductPage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/wishlist" element={<WishlistPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          
-          {/* TryOn теперь работает через searchParams */}
-          <Route path="/try-on" element={<TryOnPage />} />
-          
-          {/* Checkout доступен и гостям, и юзерам */}
-          <Route path="/checkout" element={<CheckoutPage />} />
+    return (
+        <>
+            <ScrollToTop />
+            <Layout>
+                <Routes>
+                    {/* Публичные страницы */}
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/catalog" element={<CatalogPage />} />
+                    <Route path="/product/:slug" element={<ProductPage />} />
+                    <Route path="/cart" element={<CartPage />} />
+                    <Route path="/wishlist" element={<WishlistPage />} />
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/try-on" element={<TryOnPage />} />
+                    <Route path="/checkout" element={<CheckoutPage />} />
 
-          {/* Приватные страницы (только для авторизованных) */}
-          <Route 
-            path="/profile" 
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/orders" 
-            element={
-              <ProtectedRoute>
-                <OrdersPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/orders/:id" 
-            element={
-              <ProtectedRoute>
-                <OrderDetailPage />
-              </ProtectedRoute>
-            } 
-          />
+                    {/* Страница статуса платежа (возврат с ЮKassa) */}
+                    <Route
+                        path="/payment/status"
+                        element={<PaymentStatusPage />}
+                    />
 
-          {/* 404 — всегда в конце */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Layout>
-    </>
-  );
+                    {/* Приватные страницы (только для авторизованных) */}
+                    <Route
+                        path="/profile"
+                        element={
+                            <ProtectedRoute>
+                                <ProfilePage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/orders"
+                        element={
+                            <ProtectedRoute>
+                                <OrdersPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/orders/:id"
+                        element={
+                            <ProtectedRoute>
+                                <OrderDetailPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* 404 — всегда в конце */}
+                    <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+            </Layout>
+        </>
+    );
 }
 
 export default App;===== frontend/src/components/Layout.jsx =====
@@ -4051,98 +4053,159 @@ function CatalogPage() {
 
 export default CatalogPage;===== frontend/src/pages/CheckoutPage.jsx =====
 import React, { useState } from 'react';
-import { Form, Input, Button, Typography, Alert } from 'antd';
+import { Form, Input, Button, Typography, Alert, message } from 'antd';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
 import { orderService } from '../services/orderService';
+import { paymentService } from '../services/paymentService';
 import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
 
 function CheckoutPage() {
-  const { items, total } = useCart();
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+    const { items, total } = useCart();
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
-  const onFinish = async (values) => {
-    if (items.length === 0) {
-      setError("Ваша корзина пуста");
-      return;
-    }
-    setLoading(true);
-    setError(null);
+    const onFinish = async (values) => {
+        if (items.length === 0) {
+            setError("Ваша корзина пуста");
+            return;
+        }
 
-    const orderData = {
-      guest_email: user ? undefined : values.email,
-      street: values.street,
-      city: values.city,
+        setLoading(true);
+        setError(null);
+
+        const orderData = {
+            guest_email: user ? undefined : values.email,
+            street: values.street,
+            city: values.city,
+        };
+
+        try {
+            // 1. Создаем заказ
+            const orderRes = await orderService.createOrder(orderData);
+            const orderId = orderRes.data.id;
+
+            // 2. Инициируем платеж
+            try {
+                const paymentRes = await paymentService.initiatePayment(orderId);
+                const confirmationUrl = paymentRes.data.confirmation_url;
+
+                message.success('Заказ создан! Перенаправляем на оплату...');
+
+                // 3. Редирект на страницу оплаты ЮKassa
+                setTimeout(() => {
+                    window.location.href = confirmationUrl;
+                }, 1000);
+
+            } catch (paymentError) {
+                console.error('Payment initiation failed:', paymentError);
+                message.warning(
+                    'Заказ создан, но не удалось инициировать платеж. ' +
+                    'Перейдите в раздел заказов для оплаты.'
+                );
+                navigate(`/orders`);
+            }
+
+        } catch (e) {
+            console.error(e);
+            setError(
+                e.response?.data?.detail || "Ошибка при создании заказа"
+            );
+        } finally {
+            setLoading(false);
+        }
     };
 
-    try {
-      const res = await orderService.createOrder(orderData);
-      navigate(`/orders?success=${res.data.id}`);
-    } catch (e) {
-      console.error(e);
-      setError(e.response?.data?.detail || "Ошибка при создании заказа. Проверьте наличие товаров.");
-    } finally {
-      setLoading(false);
+    if (items.length === 0 && !loading) {
+        return (
+            <div style={{ textAlign: 'center', padding: 80 }}>
+                <Title level={3}>Ваша корзина пуста</Title>
+                <Button
+                    type="primary"
+                    onClick={() => navigate('/catalog')}
+                >
+                    Перейти к покупкам
+                </Button>
+            </div>
+        );
     }
-  };
 
-  if (items.length === 0 && !loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Title level={3}>Ваша корзина пуста</Title>
-        <Button type="primary" onClick={() => navigate('/catalog')}>Перейти к покупкам</Button>
-      </div>
+        <>
+            <Title level={2}>Оформление заказа</Title>
+            {error && (
+                <Alert
+                    message={error}
+                    type="error"
+                    showIcon
+                    style={{ marginBottom: 24 }}
+                />
+            )}
+            <Form
+                layout="vertical"
+                onFinish={onFinish}
+                style={{ maxWidth: 600 }}
+            >
+                {!user && (
+                    <Form.Item
+                        label="Email (для чека и уведомлений)"
+                        name="email"
+                        rules={[
+                            {
+                                required: true,
+                                type: 'email',
+                                message: 'Введите корректный email'
+                            }
+                        ]}
+                    >
+                        <Input size="large" />
+                    </Form.Item>
+                )}
+                <Form.Item
+                    label="Город"
+                    name="city"
+                    rules={[{ required: true, message: 'Укажите город' }]}
+                >
+                    <Input size="large" placeholder="Москва" />
+                </Form.Item>
+                <Form.Item
+                    label="Улица, дом и квартира"
+                    name="street"
+                    rules={[
+                        { required: true, message: 'Укажите адрес доставки' }
+                    ]}
+                >
+                    <Input
+                        size="large"
+                        placeholder="ул. Пушкина, д. 10, кв. 5"
+                    />
+                </Form.Item>
+                <div style={{
+                    fontSize: '1.4rem',
+                    fontWeight: 'bold',
+                    marginBottom: 24,
+                    padding: '16px',
+                    background: '#f5f5f5',
+                    borderRadius: 8
+                }}>
+                    Итого к оплате: {total.toFixed(2)} ₽
+                </div>
+                <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={loading}
+                    size="large"
+                    block
+                >
+                    Перейти к оплате
+                </Button>
+            </Form>
+        </>
     );
-  }
-
-  return (
-    <>
-      <Title level={2}>Оформление заказа</Title>
-
-      {error && <Alert message={error} type="error" showIcon style={{ marginBottom: 24 }} />}
-
-      <Form layout="vertical" onFinish={onFinish} style={{ maxWidth: 600 }}>
-        {!user && (
-          <Form.Item
-            label="Email (для чека и уведомлений)"
-            name="email"
-            rules={[{ required: true, type: 'email', message: 'Введите корректный email' }]}
-          >
-            <Input size="large" />
-          </Form.Item>
-        )}
-
-        <Form.Item
-          label="Город"
-          name="city"
-          rules={[{ required: true, message: 'Укажите город' }]}
-        >
-          <Input size="large" placeholder="Москва" />
-        </Form.Item>
-
-        <Form.Item
-          label="Улица, дом и квартира"
-          name="street"
-          rules={[{ required: true, message: 'Укажите адрес доставки' }]}
-        >
-          <Input size="large" placeholder="ул. Пушкина, д. 10, кв. 5" />
-        </Form.Item>
-
-        <div style={{ fontSize: '1.4rem', fontWeight: 'bold', marginBottom: 24, padding: '16px', background: '#f5f5f5', borderRadius: 8 }}>
-          Итого к оплате: {total.toFixed(2)} ₽
-        </div>
-
-        <Button type="primary" htmlType="submit" loading={loading} size="large" block>
-          Подтвердить заказ
-        </Button>
-      </Form>
-    </>
-  );
 }
 
 export default CheckoutPage;===== frontend/src/pages/HomePage.jsx =====
@@ -5025,7 +5088,276 @@ function OrdersPage() {
   );
 }
 
-export default OrdersPage;===== frontend/src/pages/ProductPage.jsx =====
+export default OrdersPage;===== frontend/src/pages/PaymentStatusPage.jsx =====
+import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Result, Spin, Button, Typography, Progress, Alert } from 'antd';
+import {
+    CheckCircleOutlined,
+    CloseCircleOutlined,
+    LoadingOutlined,
+    InfoCircleOutlined
+} from '@ant-design/icons';
+import { paymentService } from '../services/paymentService';
+import { orderService } from '../services/orderService';
+
+const { Paragraph, Text } = Typography;
+
+function PaymentStatusPage() {
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
+    const orderId = searchParams.get('order_id');
+
+    const [loading, setLoading] = useState(true);
+    const [paymentStatus, setPaymentStatus] = useState(null);
+    const [paymentData, setPaymentData] = useState(null);
+    const [attempts, setAttempts] = useState(0);
+    const [error, setError] = useState(null);
+
+    const MAX_ATTEMPTS = 60;
+    const POLL_INTERVAL = 2000;
+
+    const pollStatus = useCallback(async () => {
+        if (!orderId) {
+            // Если order_id не передан, пытаемся найти последний заказ
+            try {
+                const ordersRes = await orderService.getUserOrders();
+                const orders = ordersRes.data;
+                if (orders && orders.length > 0) {
+                    // Берем последний заказ со статусом pending
+                    const pendingOrder = orders.find(o => o.status === 'pending');
+                    if (pendingOrder) {
+                        const res = await paymentService.pollOrderPaymentStatus(pendingOrder.id);
+                        const data = res.data;
+                        setPaymentData(data);
+                        setPaymentStatus(data.status);
+                        setError(null);
+
+                        if (data.status === 'succeeded' || data.status === 'canceled') {
+                            setLoading(false);
+                            return true;
+                        }
+                        setAttempts(prev => prev + 1);
+                        return false;
+                    }
+                }
+                setError('Заказ не найден');
+                setLoading(false);
+                return true;
+            } catch (err) {
+                console.error('Error fetching orders:', err);
+                setError('Не удалось загрузить заказы');
+                setLoading(false);
+                return true;
+            }
+        }
+
+        try {
+            const res = await paymentService.pollOrderPaymentStatus(orderId);
+            const data = res.data;
+            setPaymentData(data);
+            setPaymentStatus(data.status);
+            setError(null);
+
+            if (data.status === 'succeeded' || data.status === 'canceled') {
+                setLoading(false);
+                return true;
+            }
+
+            setAttempts(prev => prev + 1);
+            return false;
+        } catch (err) {
+            console.error('Polling error:', err);
+            setAttempts(prev => prev + 1);
+            return false;
+        }
+    }, [orderId]);
+
+    useEffect(() => {
+        let isActive = true;
+        let intervalId = null;
+
+        const startPolling = async () => {
+            const isComplete = await pollStatus();
+            if (isComplete || !isActive) return;
+
+            intervalId = setInterval(async () => {
+                if (!isActive) {
+                    clearInterval(intervalId);
+                    return;
+                }
+
+                if (attempts >= MAX_ATTEMPTS) {
+                    clearInterval(intervalId);
+                    setLoading(false);
+                    setError('Превышено время ожидания. Проверьте статус заказа позже.');
+                    return;
+                }
+
+                const complete = await pollStatus();
+                if (complete) {
+                    clearInterval(intervalId);
+                }
+            }, POLL_INTERVAL);
+        };
+
+        startPolling();
+
+        return () => {
+            isActive = false;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [attempts, pollStatus]);
+
+    // Состояние загрузки
+    if (loading && !error) {
+        const progressPercent = Math.min((attempts / MAX_ATTEMPTS) * 100, 99);
+
+        return (
+            <div style={{
+                textAlign: 'center',
+                padding: '80px 24px',
+                maxWidth: 600,
+                margin: '0 auto'
+            }}>
+                <Spin
+                    indicator={
+                        <LoadingOutlined style={{ fontSize: 48 }} spin />
+                    }
+                />
+                <Paragraph style={{ marginTop: 32, fontSize: 18 }}>
+                    Проверяем статус платежа...
+                </Paragraph>
+                <Progress
+                    percent={Math.round(progressPercent)}
+                    status="active"
+                    showInfo={false}
+                    style={{ marginTop: 16 }}
+                />
+                <Text type="secondary">
+                    Пожалуйста, не закрывайте страницу
+                </Text>
+            </div>
+        );
+    }
+
+    // Ошибка
+    if (error) {
+        return (
+            <div style={{ padding: '60px 24px', maxWidth: 800, margin: '0 auto' }}>
+                <Result
+                    status="warning"
+                    icon={<InfoCircleOutlined style={{ color: '#faad14' }} />}
+                    title="Не удалось подтвердить оплату"
+                    subTitle={error}
+                    extra={[
+                        <Button
+                            type="primary"
+                            key="orders"
+                            onClick={() => navigate('/orders')}
+                        >
+                            Мои заказы
+                        </Button>,
+                        <Button key="home" onClick={() => navigate('/')}>
+                            На главную
+                        </Button>,
+                    ]}
+                />
+            </div>
+        );
+    }
+
+    // Успешная оплата
+    if (paymentStatus === 'succeeded') {
+        return (
+            <div style={{ padding: '60px 24px', maxWidth: 800, margin: '0 auto' }}>
+                <Result
+                    status="success"
+                    title="Оплата прошла успешно!"
+                    icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                    extra={[
+                        <Button
+                            type="primary"
+                            key="orders"
+                            onClick={() => navigate('/orders')}
+                        >
+                            Мои заказы
+                        </Button>,
+                        <Button key="catalog" onClick={() => navigate('/catalog')}>
+                            Продолжить покупки
+                        </Button>,
+                    ]}
+                >
+                    <Paragraph>
+                        <Text strong style={{ fontSize: 16 }}>
+                            Спасибо за покупку в CatVTON Shop!
+                        </Text>
+                    </Paragraph>
+                </Result>
+            </div>
+        );
+    }
+
+    // Отмененная оплата
+    if (paymentStatus === 'canceled') {
+        return (
+            <div style={{ padding: '60px 24px', maxWidth: 800, margin: '0 auto' }}>
+                <Result
+                    status="error"
+                    title="Оплата отменена"
+                    subTitle={
+                        <>
+                            <Paragraph>
+                                Процесс оплаты был отменен. Ваш заказ сохранен
+                                в системе, вы можете оплатить его позже в разделе
+                                «Мои заказы».
+                            </Paragraph>
+                            {paymentData?.cancellation_reason && (
+                                <Text type="secondary">
+                                    Причина: {paymentData.cancellation_reason}
+                                </Text>
+                            )}
+                        </>
+                    }
+                    icon={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />}
+                    extra={[
+                        <Button
+                            type="primary"
+                            key="orders"
+                            onClick={() => navigate('/orders')}
+                        >
+                            Мои заказы
+                        </Button>,
+                        <Button key="catalog" onClick={() => navigate('/catalog')}>
+                            Вернуться в каталог
+                        </Button>,
+                    ]}
+                />
+            </div>
+        );
+    }
+
+    // Неизвестный статус
+    return (
+        <div style={{ padding: '60px 24px', maxWidth: 800, margin: '0 auto' }}>
+            <Result
+                status="info"
+                title="Статус платежа неизвестен"
+                subTitle="Не удалось получить финальный статус. Проверьте заказ позже в разделе «Мои заказы»."
+                extra={[
+                    <Button
+                        type="primary"
+                        onClick={() => navigate('/orders')}
+                    >
+                        Мои заказы
+                    </Button>,
+                ]}
+            />
+        </div>
+    );
+}
+
+export default PaymentStatusPage;===== frontend/src/pages/ProductPage.jsx =====
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom'; // ✅ Добавлен useNavigate
 import { catalogService } from '../services/catalogService';
@@ -6093,7 +6425,47 @@ export const orderService = {
   createOrder: (data) => api.post('/orders/', data),
   getOrder: (id) => api.get(`/orders/${id}`),
   getUserOrders: () => api.get('/orders/'),
-};===== frontend/src/services/tryonService.js =====
+};===== frontend/src/services/paymentService.js =====
+import api from './api';
+
+export const paymentService = {
+    /**
+     * Инициирует платеж для заказа.
+     * @param {string} orderId - ID заказа
+     * @returns {Promise} - Ответ с confirmation_url
+     */
+    initiatePayment: (orderId) =>
+        api.post('/payments/initiate', { order_id: orderId }),
+
+    /**
+     * Получает информацию о платеже.
+     * @param {string} paymentId - ID платежа
+     */
+    getPayment: (paymentId) =>
+        api.get(`/payments/${paymentId}`),
+
+    /**
+     * Получает все платежи для заказа.
+     * @param {string} orderId - ID заказа
+     */
+    getOrderPayments: (orderId) =>
+        api.get(`/payments/order/${orderId}`),
+
+    /**
+     * Отменяет платеж.
+     * @param {string} paymentId - ID платежа
+     */
+    cancelPayment: (paymentId) =>
+        api.post(`/payments/${paymentId}/cancel`),
+
+    /**
+     * Polling статуса платежа для заказа.
+     * @param {string} orderId - ID заказа
+     */
+    pollOrderPaymentStatus: (orderId) =>
+        api.get(`/payments/order/${orderId}/status`),
+};
+===== frontend/src/services/tryonService.js =====
 import api from './api';
 
 export const tryonService = {

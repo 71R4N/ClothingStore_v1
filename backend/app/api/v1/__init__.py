@@ -7,6 +7,7 @@ from app.orders.routes import router as orders_router
 from app.tryon.routes import router as tryon_router
 from app.wishlist.routes import router as wishlist_router
 from app.upload.routes import router as upload_router
+from app.payments.routes import router as payments_router
 
 
 v1_router = APIRouter()
@@ -18,3 +19,4 @@ v1_router.include_router(orders_router)
 v1_router.include_router(tryon_router)
 v1_router.include_router(wishlist_router)
 v1_router.include_router(upload_router)
+v1_router.include_router(payments_router)

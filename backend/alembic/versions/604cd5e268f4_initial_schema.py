@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 045c4f7a5293
+Revision ID: 604cd5e268f4
 Revises: 
-Create Date: 2026-06-05 09:35:14.220448
+Create Date: 2026-06-05 17:31:49.840228
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '045c4f7a5293'
+revision: str = '604cd5e268f4'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -86,12 +86,17 @@ def upgrade() -> None:
     op.create_table('payments',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('order_id', sa.UUID(), nullable=False),
-    sa.Column('tbank_payment_id', sa.String(length=100), nullable=True),
+    sa.Column('yookassa_payment_id', sa.String(length=100), nullable=True),
     sa.Column('amount', sa.Numeric(precision=10, scale=2, asdecimal=False), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'AUTHORIZED', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'REFUNDED', 'PARTIAL_REFUNDED', name='payment_status_enum', create_constraint=True), nullable=False),
-    sa.Column('payment_method', sa.Enum('CARD', 'SBP', 'TPAY', 'SBERPAY', name='payment_method_enum', create_constraint=True), nullable=True),
+    sa.Column('currency', sa.String(length=3), nullable=False),
+    sa.Column('status', sa.Enum('PENDING', 'WAITING_FOR_CAPTURE', 'SUCCEEDED', 'CANCELED', name='payment_status_enum', create_constraint=True), nullable=False),
+    sa.Column('payment_method', sa.Enum('BANK_CARD', 'YOO_MONEY', 'SBP', 'TINKOFF_BANK', 'SBERBANK', 'ALFABANK', name='payment_method_enum', create_constraint=True), nullable=True),
+    sa.Column('is_test', sa.Boolean(), nullable=False),
+    sa.Column('confirmation_url', sa.String(length=2000), nullable=True),
     sa.Column('payment_url', sa.String(length=2000), nullable=True),
     sa.Column('error_message', sa.String(length=500), nullable=True),
+    sa.Column('cancellation_reason', sa.String(length=255), nullable=True),
+    sa.Column('cancellation_party', sa.String(length=50), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], name=op.f('payments_order_id_fkey'), ondelete='CASCADE'),
@@ -99,7 +104,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('payments_order_id_idx'), 'payments', ['order_id'], unique=False)
     op.create_index(op.f('payments_status_idx'), 'payments', ['status'], unique=False)
-    op.create_index(op.f('payments_tbank_payment_id_idx'), 'payments', ['tbank_payment_id'], unique=False)
+    op.create_index(op.f('payments_yookassa_payment_id_idx'), 'payments', ['yookassa_payment_id'], unique=True)
     op.create_table('product_colors',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
@@ -205,7 +210,7 @@ def downgrade() -> None:
     op.drop_table('product_variants')
     op.drop_table('product_sizes')
     op.drop_table('product_colors')
-    op.drop_index(op.f('payments_tbank_payment_id_idx'), table_name='payments')
+    op.drop_index(op.f('payments_yookassa_payment_id_idx'), table_name='payments')
     op.drop_index(op.f('payments_status_idx'), table_name='payments')
     op.drop_index(op.f('payments_order_id_idx'), table_name='payments')
     op.drop_table('payments')

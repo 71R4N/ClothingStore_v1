@@ -9,17 +9,21 @@ from typing import List, Optional
 
 
 class OrderStatus(str, enum.Enum):
-    PENDING = "pending"           # Ожидает оплаты
-    PROCESSING = "processing"     # Оплачен, собирается на складе
-    SHIPPED = "shipped"           # Передан в службу доставки
-    DELIVERED = "delivered"       # Доставлен клиенту
-    CANCELLED = "cancelled"       # Отменён
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SHIPPED = "shipped"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
 
 
 class Order(Base):
     __tablename__ = "orders"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -31,7 +35,6 @@ class Order(Base):
         default=OrderStatus.PENDING,
         nullable=False
     )
-
     street: Mapped[Optional[str]] = mapped_column(String(255))
     city: Mapped[Optional[str]] = mapped_column(String(100))
     total: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
@@ -41,18 +44,29 @@ class Order(Base):
         onupdate=datetime.utcnow
     )
 
-    user: Mapped[Optional["User"]] = relationship("User", back_populates="orders")
+    user: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="orders"
+    )
     items: Mapped[List["OrderItem"]] = relationship(
-        "OrderItem", back_populates="order", cascade="all, delete-orphan"
+        "OrderItem",
+        back_populates="order",
+        cascade="all, delete-orphan"
     )
     payments: Mapped[List["Payment"]] = relationship(
-        "Payment", back_populates="order", cascade="all, delete-orphan"
+        "Payment",
+        back_populates="order",
+        cascade="all, delete-orphan"
     )
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     order_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("orders.id", ondelete="CASCADE")
@@ -62,7 +76,9 @@ class OrderItem(Base):
         ForeignKey("product_variants.id")
     )
     quantity: Mapped[int] = mapped_column(Integer)
-    price_at_purchase: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
+    price_at_purchase: Mapped[float] = mapped_column(
+        Numeric(10, 2, asdecimal=False)
+    )
 
     order: Mapped[Order] = relationship("Order", back_populates="items")
     variant: Mapped[Optional["ProductVariant"]] = relationship(

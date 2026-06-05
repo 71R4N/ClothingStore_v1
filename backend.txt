@@ -97,12 +97,12 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     ${downgrades if downgrades else "pass"}
-===== backend/alembic/versions/045c4f7a5293_initial_schema.py =====
+===== backend/alembic/versions/604cd5e268f4_initial_schema.py =====
 """initial schema
 
-Revision ID: 045c4f7a5293
+Revision ID: 604cd5e268f4
 Revises: 
-Create Date: 2026-06-05 09:35:14.220448
+Create Date: 2026-06-05 17:31:49.840228
 
 """
 from typing import Sequence, Union
@@ -112,7 +112,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '045c4f7a5293'
+revision: str = '604cd5e268f4'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -186,12 +186,17 @@ def upgrade() -> None:
     op.create_table('payments',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('order_id', sa.UUID(), nullable=False),
-    sa.Column('tbank_payment_id', sa.String(length=100), nullable=True),
+    sa.Column('yookassa_payment_id', sa.String(length=100), nullable=True),
     sa.Column('amount', sa.Numeric(precision=10, scale=2, asdecimal=False), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'AUTHORIZED', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'REFUNDED', 'PARTIAL_REFUNDED', name='payment_status_enum', create_constraint=True), nullable=False),
-    sa.Column('payment_method', sa.Enum('CARD', 'SBP', 'TPAY', 'SBERPAY', name='payment_method_enum', create_constraint=True), nullable=True),
+    sa.Column('currency', sa.String(length=3), nullable=False),
+    sa.Column('status', sa.Enum('PENDING', 'WAITING_FOR_CAPTURE', 'SUCCEEDED', 'CANCELED', name='payment_status_enum', create_constraint=True), nullable=False),
+    sa.Column('payment_method', sa.Enum('BANK_CARD', 'YOO_MONEY', 'SBP', 'TINKOFF_BANK', 'SBERBANK', 'ALFABANK', name='payment_method_enum', create_constraint=True), nullable=True),
+    sa.Column('is_test', sa.Boolean(), nullable=False),
+    sa.Column('confirmation_url', sa.String(length=2000), nullable=True),
     sa.Column('payment_url', sa.String(length=2000), nullable=True),
     sa.Column('error_message', sa.String(length=500), nullable=True),
+    sa.Column('cancellation_reason', sa.String(length=255), nullable=True),
+    sa.Column('cancellation_party', sa.String(length=50), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], name=op.f('payments_order_id_fkey'), ondelete='CASCADE'),
@@ -199,7 +204,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('payments_order_id_idx'), 'payments', ['order_id'], unique=False)
     op.create_index(op.f('payments_status_idx'), 'payments', ['status'], unique=False)
-    op.create_index(op.f('payments_tbank_payment_id_idx'), 'payments', ['tbank_payment_id'], unique=False)
+    op.create_index(op.f('payments_yookassa_payment_id_idx'), 'payments', ['yookassa_payment_id'], unique=True)
     op.create_table('product_colors',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
@@ -305,7 +310,7 @@ def downgrade() -> None:
     op.drop_table('product_variants')
     op.drop_table('product_sizes')
     op.drop_table('product_colors')
-    op.drop_index(op.f('payments_tbank_payment_id_idx'), table_name='payments')
+    op.drop_index(op.f('payments_yookassa_payment_id_idx'), table_name='payments')
     op.drop_index(op.f('payments_status_idx'), table_name='payments')
     op.drop_index(op.f('payments_order_id_idx'), table_name='payments')
     op.drop_table('payments')
@@ -517,6 +522,7 @@ from app.orders.routes import router as orders_router
 from app.tryon.routes import router as tryon_router
 from app.wishlist.routes import router as wishlist_router
 from app.upload.routes import router as upload_router
+from app.payments.routes import router as payments_router
 
 
 v1_router = APIRouter()
@@ -528,6 +534,7 @@ v1_router.include_router(orders_router)
 v1_router.include_router(tryon_router)
 v1_router.include_router(wishlist_router)
 v1_router.include_router(upload_router)
+v1_router.include_router(payments_router)
 ===== backend/app/api/__init__.py =====
 ===== backend/app/auth/dependencies.py =====
 from fastapi import Depends, Request, status
@@ -1787,6 +1794,11 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    YOOKASSA_SHOP_ID: str = ""
+    YOOKASSA_SECRET_KEY: str = ""
+    YOOKASSA_RETURN_URL: str = "http://localhost:5173/payment/status"
+    YOOKASSA_CANCEL_URL: str = "http://localhost:5173/payment/status"
+
     # CatVTON
     CATVTON_API_URL: str = "http://localhost:8001"
     CATVTON_TIMEOUT: int = 300
@@ -1856,7 +1868,8 @@ from app.catalog.models import Category, Product, ProductSize, ProductColor, Pro
 from app.cart.models import CartItem
 from app.orders.models import Order, OrderItem
 from app.wishlist.models import Wishlist
-from app.tryon.models import TryOnSession===== backend/app/core/exceptions.py =====
+from app.tryon.models import TryOnSession
+from app.payments.models import Payment===== backend/app/core/exceptions.py =====
 from fastapi import HTTPException, status
 
 class BaseAppException(HTTPException):
@@ -2518,17 +2531,21 @@ from typing import List, Optional
 
 
 class OrderStatus(str, enum.Enum):
-    PENDING = "pending"           # Ожидает оплаты
-    PROCESSING = "processing"     # Оплачен, собирается на складе
-    SHIPPED = "shipped"           # Передан в службу доставки
-    DELIVERED = "delivered"       # Доставлен клиенту
-    CANCELLED = "cancelled"       # Отменён
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SHIPPED = "shipped"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
 
 
 class Order(Base):
     __tablename__ = "orders"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -2540,7 +2557,6 @@ class Order(Base):
         default=OrderStatus.PENDING,
         nullable=False
     )
-
     street: Mapped[Optional[str]] = mapped_column(String(255))
     city: Mapped[Optional[str]] = mapped_column(String(100))
     total: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
@@ -2550,18 +2566,29 @@ class Order(Base):
         onupdate=datetime.utcnow
     )
 
-    user: Mapped[Optional["User"]] = relationship("User", back_populates="orders")
+    user: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="orders"
+    )
     items: Mapped[List["OrderItem"]] = relationship(
-        "OrderItem", back_populates="order", cascade="all, delete-orphan"
+        "OrderItem",
+        back_populates="order",
+        cascade="all, delete-orphan"
     )
     payments: Mapped[List["Payment"]] = relationship(
-        "Payment", back_populates="order", cascade="all, delete-orphan"
+        "Payment",
+        back_populates="order",
+        cascade="all, delete-orphan"
     )
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
     order_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("orders.id", ondelete="CASCADE")
@@ -2571,7 +2598,9 @@ class OrderItem(Base):
         ForeignKey("product_variants.id")
     )
     quantity: Mapped[int] = mapped_column(Integer)
-    price_at_purchase: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
+    price_at_purchase: Mapped[float] = mapped_column(
+        Numeric(10, 2, asdecimal=False)
+    )
 
     order: Mapped[Order] = relationship("Order", back_populates="items")
     variant: Mapped[Optional["ProductVariant"]] = relationship(
@@ -2841,13 +2870,842 @@ class OrderService:
         update_schema = OrderStatusUpdate(status=status)
         await self.order_repo.update(update_schema, order_id, exclude_unset=True)
         return await self.get_order(order_id)===== backend/app/orders/__init__.py =====
+===== backend/app/payments/client.py =====
+import httpx
+import uuid
+import logging
+from typing import Optional
+from app.core.config import settings
+from app.payments.exceptions import YooKassaAPIError, YooKassaConfigError
+
+logger = logging.getLogger(__name__)
+
+
+class YooKassaClient:
+    """Асинхронный клиент для работы с API ЮKassa."""
+
+    BASE_URL = "https://api.yookassa.ru/v3"
+
+    def __init__(self):
+        self.shop_id = settings.YOOKASSA_SHOP_ID
+        self.secret_key = settings.YOOKASSA_SECRET_KEY
+
+        if not self.shop_id or not self.secret_key:
+            logger.warning(
+                "YooKassa credentials not configured. "
+                "Payment operations will fail."
+            )
+
+    def _get_headers(self, idempotence_key: Optional[str] = None) -> dict:
+        """Формирует заголовки для запроса."""
+        headers = {
+            "Content-Type": "application/json",
+        }
+        if idempotence_key:
+            headers["Idempotence-Key"] = idempotence_key
+        return headers
+
+    def _get_auth(self) -> tuple:
+        """Возвращает tuple для Basic Auth."""
+        if not self.shop_id or not self.secret_key:
+            raise YooKassaConfigError(
+                "YooKassa shop_id and secret_key are required"
+            )
+        return (self.shop_id, self.secret_key)
+
+    async def create_payment(
+            self,
+            amount: float,
+            description: str,
+            order_id: str,
+            metadata: Optional[dict] = None,
+            return_url: Optional[str] = None,
+            cancel_url: Optional[str] = None,
+    ) -> dict:
+        """
+        Создает платеж в ЮKassa.
+        Возвращает ответ от API в формате JSON.
+        """
+        url = f"{self.BASE_URL}/payments"
+        idempotence_key = str(uuid.uuid4())
+
+        payment_data = {
+            "amount": {
+                "value": f"{amount:.2f}",
+                "currency": "RUB"
+            },
+            "capture": True,
+            "confirmation": {
+                "type": "redirect",
+                "return_url": return_url or settings.YOOKASSA_RETURN_URL,
+                "cancel_url": cancel_url or settings.YOOKASSA_CANCEL_URL,
+            },
+            "description": description[:128],
+            "metadata": metadata or {"order_id": order_id},
+        }
+
+        logger.info(
+            f"Creating YooKassa payment for order {order_id}, "
+            f"amount: {amount}"
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    url,
+                    json=payment_data,
+                    auth=self._get_auth(),
+                    headers=self._get_headers(idempotence_key)
+                )
+                response.raise_for_status()
+                result = response.json()
+                logger.info(
+                    f"YooKassa payment created: {result.get('id')}, "
+                    f"status: {result.get('status')}"
+                )
+                return result
+        except httpx.HTTPStatusError as e:
+            error_text = e.response.text
+            logger.error(
+                f"YooKassa API HTTP error: "
+                f"{e.response.status_code} - {error_text}"
+            )
+            raise YooKassaAPIError(f"API error: {error_text}")
+        except httpx.RequestError as e:
+            logger.error(f"YooKassa API request error: {e}")
+            raise YooKassaAPIError(f"Request error: {str(e)}")
+
+    async def get_payment(self, payment_id: str) -> dict:
+        """Получает информацию о платеже по его ID в ЮKassa."""
+        url = f"{self.BASE_URL}/payments/{payment_id}"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    url,
+                    auth=self._get_auth(),
+                    headers=self._get_headers()
+                )
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"YooKassa get payment error: {e.response.status_code}"
+            )
+            raise YooKassaAPIError(f"API error: {e.response.text}")
+        except httpx.RequestError as e:
+            logger.error(f"YooKassa request error: {e}")
+            raise YooKassaAPIError(f"Request error: {str(e)}")
+
+    async def cancel_payment(self, payment_id: str) -> dict:
+        """Отменяет платеж."""
+        url = f"{self.BASE_URL}/payments/{payment_id}/cancel"
+        idempotence_key = str(uuid.uuid4())
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    url,
+                    auth=self._get_auth(),
+                    headers=self._get_headers(idempotence_key)
+                )
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"YooKassa cancel error: {e.response.status_code}"
+            )
+            raise YooKassaAPIError(f"API error: {e.response.text}")
+
+
+# Глобальный экземпляр клиента
+yookassa_client = YooKassaClient()
 ===== backend/app/payments/dependencies.py =====
+from typing import Annotated
+from fastapi import Depends
+from app.core.database import SessionDbDep
+from app.payments.repositories import PaymentRepo
+from app.payments.services import PaymentService
+from app.orders.repositories import OrderRepo
+
+
+def get_payment_service(session: SessionDbDep) -> PaymentService:
+    """Фабрика для создания PaymentService."""
+    payment_repo = PaymentRepo(session)
+    order_repo = OrderRepo(session)
+    return PaymentService(payment_repo, order_repo)
+
+
+PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
 ===== backend/app/payments/exceptions.py =====
+from app.core.exceptions import NotFoundException, ConflictException, BaseAppException
+from fastapi import status
+
+
+class PaymentNotFoundError(NotFoundException):
+    """Платеж не найден."""
+    detail = "Payment not found"
+
+
+class PaymentAlreadyPaidError(ConflictException):
+    """Платеж уже оплачен."""
+    detail = "Order already has a successful payment"
+
+
+class InvalidPaymentStatusError(ConflictException):
+    """Недопустимый статус платежа для данной операции."""
+    detail = "Invalid payment status for this operation"
+
+
+class YooKassaAPIError(BaseAppException):
+    """Ошибка API ЮKassa."""
+    status_code = status.HTTP_502_BAD_GATEWAY
+    detail = "Payment gateway error"
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(detail=detail or self.detail)
+
+
+class YooKassaConfigError(BaseAppException):
+    """Ошибка конфигурации ЮKassa."""
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    detail = "Payment gateway configuration error"
 ===== backend/app/payments/models.py =====
+import uuid
+import enum
+from sqlalchemy import ForeignKey, String, Numeric, Enum as SAEnum, Boolean
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
+from app.core.database import Base, CreatedAtCol
+from datetime import datetime
+from typing import Optional
+
+
+class PaymentStatus(str, enum.Enum):
+    """Статусы платежа ЮKassa."""
+    PENDING = "pending"
+    WAITING_FOR_CAPTURE = "waiting_for_capture"
+    SUCCEEDED = "succeeded"
+    CANCELED = "canceled"
+
+
+class PaymentMethod(str, enum.Enum):
+    """Методы оплаты ЮKassa."""
+    BANK_CARD = "bank_card"
+    YOO_MONEY = "yoo_money"
+    SBP = "sbp"
+    TINKOFF_BANK = "tinkoff_bank"
+    SBERBANK = "sberbank"
+    ALFABANK = "alfabank"
+
+
+class Payment(Base):
+    """Модель платежа."""
+    __tablename__ = "payments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    yookassa_payment_id: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        unique=True,
+        nullable=True,
+        index=True
+    )
+    amount: Mapped[float] = mapped_column(
+        Numeric(10, 2, asdecimal=False),
+        nullable=False
+    )
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        default="RUB"
+    )
+    status: Mapped[PaymentStatus] = mapped_column(
+        SAEnum(PaymentStatus, name="payment_status_enum", create_constraint=True),
+        default=PaymentStatus.PENDING,
+        nullable=False,
+        index=True
+    )
+    payment_method: Mapped[Optional[PaymentMethod]] = mapped_column(
+        SAEnum(PaymentMethod, name="payment_method_enum", create_constraint=True),
+        nullable=True
+    )
+    is_test: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False
+    )
+    confirmation_url: Mapped[Optional[str]] = mapped_column(
+        String(2000),
+        nullable=True
+    )
+    payment_url: Mapped[Optional[str]] = mapped_column(
+        String(2000),
+        nullable=True
+    )
+    error_message: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True
+    )
+    cancellation_reason: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True
+    )
+    cancellation_party: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True
+    )
+    created_at: Mapped[CreatedAtCol]
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    order: Mapped["Order"] = relationship("Order", back_populates="payments")
 ===== backend/app/payments/repositories.py =====
-===== backend/app/payments/routes.py =====
+from app.core.repository import SqlAlchemyRepo
+from app.payments.models import Payment
+from sqlalchemy import select
+from uuid import UUID
+from typing import Optional
+
+
+class PaymentRepo(SqlAlchemyRepo):
+    """Репозиторий для работы с платежами."""
+    model = Payment
+
+    async def get_by_order_id(self, order_id: UUID) -> Optional[Payment]:
+        """Получает последний платеж для заказа."""
+        stmt = (
+            select(self.model)
+            .where(self.model.order_id == order_id)
+            .order_by(self.model.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_yookassa_id(self, yookassa_payment_id: str) -> Optional[Payment]:
+        """Получает платеж по ID из ЮKassa."""
+        stmt = select(self.model).where(
+            self.model.yookassa_payment_id == yookassa_payment_id
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_order_payments(self, order_id: UUID) -> list[Payment]:
+        """Получает все платежи для заказа."""
+        stmt = (
+            select(self.model)
+            .where(self.model.order_id == order_id)
+            .order_by(self.model.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def update_status(
+        self,
+        payment_id: UUID,
+        status: str,
+        payment_method: Optional[str] = None,
+        cancellation_reason: Optional[str] = None,
+        cancellation_party: Optional[str] = None,
+    ) -> Optional[Payment]:
+        """Обновляет статус платежа."""
+        payment = await self.read_by_id(payment_id)
+        if not payment:
+            return None
+
+        payment.status = status
+        if payment_method:
+            payment.payment_method = payment_method
+        if cancellation_reason:
+            payment.cancellation_reason = cancellation_reason
+        if cancellation_party:
+            payment.cancellation_party = cancellation_party
+
+        await self.session.commit()
+        await self.session.refresh(payment)
+        return payment
+    ===== backend/app/payments/routes.py =====
+from fastapi import APIRouter, HTTPException, status
+from uuid import UUID
+from app.payments.schemas import (
+    PaymentCreate,
+    PaymentRead,
+    PaymentInitiateResponse,
+    PaymentPollResponse,
+)
+from app.payments.dependencies import PaymentServiceDep
+from app.payments.exceptions import (
+    PaymentNotFoundError,
+    PaymentAlreadyPaidError,
+    InvalidPaymentStatusError,
+    YooKassaAPIError,
+)
+from app.auth.dependencies import CurrentUserDep
+from app.core.exceptions import ForbiddenException, NotFoundException
+import logging
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/payments", tags=["payments"])
+
+
+@router.post(
+    "/initiate",
+    response_model=PaymentInitiateResponse,
+    status_code=status.HTTP_201_CREATED
+)
+async def initiate_payment(
+    data: PaymentCreate,
+    current_user: CurrentUserDep,
+    payment_svc: PaymentServiceDep,
+):
+    """
+    Инициирует платеж для заказа.
+    Возвращает URL для редиректа на страницу оплаты ЮKassa.
+    """
+    try:
+        payment = await payment_svc.create_payment_for_order(data.order_id)
+
+        if not payment.confirmation_url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to get confirmation URL from YooKassa"
+            )
+
+        return PaymentInitiateResponse(
+            payment_id=payment.id,
+            yookassa_payment_id=payment.yookassa_payment_id,
+            confirmation_url=payment.confirmation_url,
+            status=payment.status.value,
+            is_test=payment.is_test,
+        )
+    except PaymentAlreadyPaidError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Order already has a successful payment"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except YooKassaAPIError as e:
+        logger.error(f"Payment initiation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Payment service unavailable"
+        )
+
+
+@router.get(
+    "/order/{order_id}/status",
+    response_model=PaymentPollResponse
+)
+async def poll_order_payment_status(
+    order_id: UUID,
+    current_user: CurrentUserDep,
+    payment_svc: PaymentServiceDep,
+):
+    """
+    Проверяет статус платежа для заказа через API ЮKassa.
+    Используется для polling после редиректа с оплаты.
+    """
+    try:
+        payment = await payment_svc.poll_payment_status(order_id)
+
+        # Проверка доступа
+        order = await payment_svc.order_repo.read_by_id(order_id)
+        if order and order.user_id:
+            if (
+                order.user_id != current_user.id
+                and current_user.role != "admin"
+            ):
+                raise ForbiddenException()
+
+        return PaymentPollResponse(
+            id=payment.id,
+            order_id=payment.order_id,
+            status=payment.status.value,
+            payment_method=(
+                payment.payment_method.value
+                if payment.payment_method
+                else None
+            ),
+            amount=float(payment.amount),
+            is_test=payment.is_test,
+            updated_at=payment.updated_at,
+        )
+    except PaymentNotFoundError:
+        raise NotFoundException(detail="Payment not found")
+    except YooKassaAPIError:
+        # Возвращаем текущий статус из БД при ошибке API
+        payment = await payment_svc.payment_repo.get_by_order_id(order_id)
+        if payment:
+            return PaymentPollResponse(
+                id=payment.id,
+                order_id=payment.order_id,
+                status=payment.status.value,
+                payment_method=(
+                    payment.payment_method.value
+                    if payment.payment_method
+                    else None
+                ),
+                amount=float(payment.amount),
+                is_test=payment.is_test,
+                updated_at=payment.updated_at,
+            )
+        raise NotFoundException(detail="Payment not found")
+
+
+@router.get("/{payment_id}", response_model=PaymentRead)
+async def get_payment(
+    payment_id: UUID,
+    current_user: CurrentUserDep,
+    payment_svc: PaymentServiceDep,
+):
+    """Получает информацию о платеже."""
+    payment = await payment_svc.payment_repo.read_by_id(payment_id)
+    if not payment:
+        raise NotFoundException(detail="Payment not found")
+
+    # Проверка доступа
+    order = await payment_svc.order_repo.read_by_id(payment.order_id)
+    if order and order.user_id:
+        if (
+            order.user_id != current_user.id
+            and current_user.role != "admin"
+        ):
+            raise ForbiddenException()
+
+    return payment
+
+
+@router.get("/order/{order_id}", response_model=list[PaymentRead])
+async def get_order_payments(
+    order_id: UUID,
+    current_user: CurrentUserDep,
+    payment_svc: PaymentServiceDep,
+):
+    """Получает все платежи для заказа."""
+    order = await payment_svc.order_repo.read_by_id(order_id)
+    if not order:
+        raise NotFoundException(detail="Order not found")
+
+    if (
+        order.user_id
+        and order.user_id != current_user.id
+        and current_user.role != "admin"
+    ):
+        raise ForbiddenException()
+
+    return await payment_svc.get_order_payments(order_id)
+
+
+@router.post("/{payment_id}/cancel", response_model=PaymentRead)
+async def cancel_payment(
+    payment_id: UUID,
+    current_user: CurrentUserDep,
+    payment_svc: PaymentServiceDep,
+):
+    """Отменяет платеж."""
+    try:
+        payment = await payment_svc.cancel_payment(payment_id)
+        return payment
+    except PaymentNotFoundError:
+        raise NotFoundException(detail="Payment not found")
+    except InvalidPaymentStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except YooKassaAPIError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to cancel payment"
+        )
 ===== backend/app/payments/schemas.py =====
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
+from datetime import datetime
+
+
+class PaymentCreate(BaseModel):
+    """Схема для создания платежа."""
+    order_id: UUID
+
+
+class PaymentRead(BaseModel):
+    """Схема для чтения платежа."""
+    id: UUID
+    order_id: UUID
+    yookassa_payment_id: Optional[str] = None
+    amount: float
+    currency: str = "RUB"
+    status: str
+    payment_method: Optional[str] = None
+    is_test: bool = False
+    confirmation_url: Optional[str] = None
+    payment_url: Optional[str] = None
+    error_message: Optional[str] = None
+    cancellation_reason: Optional[str] = None
+    cancellation_party: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PaymentInitiateResponse(BaseModel):
+    """Ответ при инициации платежа."""
+    payment_id: UUID
+    yookassa_payment_id: str
+    confirmation_url: str
+    status: str
+    is_test: bool = False
+
+
+class PaymentPollResponse(BaseModel):
+    """Ответ при polling статуса платежа."""
+    id: UUID
+    order_id: UUID
+    status: str
+    payment_method: Optional[str] = None
+    amount: float
+    is_test: bool = False
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 ===== backend/app/payments/services.py =====
+import logging
+from typing import Optional
+from uuid import UUID
+from app.payments.repositories import PaymentRepo
+from app.payments.models import Payment, PaymentStatus, PaymentMethod
+from app.payments.client import yookassa_client, YooKassaAPIError
+from app.payments.exceptions import (
+    PaymentNotFoundError,
+    PaymentAlreadyPaidError,
+    InvalidPaymentStatusError,
+)
+from app.orders.repositories import OrderRepo
+from app.orders.models import Order, OrderStatus
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class PaymentService:
+    """Сервис для работы с платежами."""
+
+    def __init__(self, payment_repo: PaymentRepo, order_repo: OrderRepo):
+        self.payment_repo = payment_repo
+        self.order_repo = order_repo
+
+    async def create_payment_for_order(self, order_id: UUID) -> Payment:
+        """
+        Создает платеж в ЮKassa для указанного заказа.
+        Возвращает созданный объект Payment.
+        """
+        order = await self.order_repo.read_by_id(order_id)
+        if not order:
+            raise ValueError(f"Order {order_id} not found")
+
+        if order.status != OrderStatus.PENDING:
+            raise ValueError(
+                f"Order is not in PENDING status: {order.status}"
+            )
+
+        existing_payment = await self.payment_repo.get_by_order_id(order_id)
+        if (
+                existing_payment
+                and existing_payment.status == PaymentStatus.SUCCEEDED
+        ):
+            raise PaymentAlreadyPaidError()
+
+        description = f"Заказ #{str(order.id)[:8]} на сумму {order.total} руб."
+
+        # Формируем URL возврата с order_id
+        return_url = f"{settings.YOOKASSA_RETURN_URL}?order_id={order.id}"
+        cancel_url = f"{settings.YOOKASSA_CANCEL_URL}?order_id={order.id}"
+
+        try:
+            yookassa_response = await yookassa_client.create_payment(
+                amount=float(order.total),
+                description=description,
+                order_id=str(order.id),
+                metadata={"order_id": str(order.id)},
+                return_url=return_url,
+                cancel_url=cancel_url,
+            )
+
+            payment = Payment(
+                order_id=order.id,
+                yookassa_payment_id=yookassa_response.get("id"),
+                amount=float(order.total),
+                currency=yookassa_response.get("amount", {}).get(
+                    "currency", "RUB"
+                ),
+                status=PaymentStatus(
+                    yookassa_response.get("status", "pending")
+                ),
+                is_test=yookassa_response.get("test", False),
+                confirmation_url=yookassa_response.get(
+                    "confirmation", {}
+                ).get("confirmation_url"),
+            )
+
+            self.payment_repo.session.add(payment)
+            await self.payment_repo.session.commit()
+            await self.payment_repo.session.refresh(payment)
+
+            logger.info(
+                f"Payment created for order {order_id}: {payment.id}"
+            )
+            return payment
+
+        except YooKassaAPIError as e:
+            logger.error(
+                f"Failed to create payment for order {order_id}: {e}"
+            )
+            payment = Payment(
+                order_id=order.id,
+                amount=float(order.total),
+                status=PaymentStatus.CANCELED,
+                error_message=str(e),
+            )
+            self.payment_repo.session.add(payment)
+            await self.payment_repo.session.commit()
+            raise
+
+    async def poll_payment_status(self, order_id: UUID) -> Payment:
+        """
+        Проверяет статус платежа через API ЮKassa.
+        Используется вместо webhook для тестирования.
+        """
+        payment = await self.payment_repo.get_by_order_id(order_id)
+        if not payment or not payment.yookassa_payment_id:
+            raise PaymentNotFoundError()
+
+        if payment.status in [
+            PaymentStatus.SUCCEEDED,
+            PaymentStatus.CANCELED
+        ]:
+            return payment
+
+        try:
+            yookassa_data = await yookassa_client.get_payment(
+                payment.yookassa_payment_id
+            )
+            new_status = yookassa_data.get("status")
+
+            if new_status and new_status != payment.status.value:
+                try:
+                    payment.status = PaymentStatus(new_status)
+                except ValueError:
+                    logger.warning(f"Unknown payment status: {new_status}")
+
+                payment_method_data = yookassa_data.get("payment_method")
+                if payment_method_data:
+                    method_type = payment_method_data.get("type")
+                    if method_type:
+                        try:
+                            payment.payment_method = PaymentMethod(
+                                method_type
+                            )
+                        except ValueError:
+                            pass
+
+                if new_status == "canceled":
+                    cancellation_details = yookassa_data.get(
+                        "cancellation_details", {}
+                    )
+                    payment.cancellation_reason = cancellation_details.get(
+                        "reason"
+                    )
+                    payment.cancellation_party = cancellation_details.get(
+                        "party"
+                    )
+
+                await self.payment_repo.session.commit()
+                await self.payment_repo.session.refresh(payment)
+
+                if new_status == "succeeded":
+                    await self._update_order_status(
+                        payment.order_id, OrderStatus.PROCESSING
+                    )
+                elif new_status == "canceled":
+                    await self._update_order_status(
+                        payment.order_id, OrderStatus.CANCELLED
+                    )
+
+                logger.info(
+                    f"Payment {payment.id} status updated to {new_status}"
+                )
+
+            return payment
+
+        except YooKassaAPIError as e:
+            logger.error(f"Failed to poll payment status: {e}")
+            return payment
+
+    async def _update_order_status(
+        self, order_id: UUID, new_status: OrderStatus
+    ):
+        """Обновляет статус заказа."""
+        order = await self.order_repo.read_by_id(order_id)
+        if order:
+            order.status = new_status
+            await self.order_repo.session.commit()
+            logger.info(
+                f"Order {order_id} status updated to {new_status}"
+            )
+
+    async def get_order_payments(self, order_id: UUID) -> list[Payment]:
+        """Возвращает все платежи для заказа."""
+        return await self.payment_repo.get_order_payments(order_id)
+
+    async def cancel_payment(self, payment_id: UUID) -> Payment:
+        """Отменяет платеж."""
+        payment = await self.payment_repo.read_by_id(payment_id)
+        if not payment:
+            raise PaymentNotFoundError()
+
+        if payment.status not in [
+            PaymentStatus.PENDING,
+            PaymentStatus.WAITING_FOR_CAPTURE
+        ]:
+            raise InvalidPaymentStatusError(
+                f"Cannot cancel payment in status {payment.status}"
+            )
+
+        try:
+            await yookassa_client.cancel_payment(
+                payment.yookassa_payment_id
+            )
+            payment.status = PaymentStatus.CANCELED
+            payment.cancellation_party = "merchant"
+            await self.payment_repo.session.commit()
+            await self.payment_repo.session.refresh(payment)
+
+            await self._update_order_status(
+                payment.order_id, OrderStatus.CANCELLED
+            )
+
+            return payment
+        except YooKassaAPIError as e:
+            logger.error(f"Failed to cancel payment: {e}")
+            raise
 ===== backend/app/payments/__init__.py =====
 ===== backend/app/tryon/dependencies.py =====
 from typing import Annotated
