@@ -3,7 +3,8 @@ from app.orders.schemas import OrderCreate, OrderStatusUpdate
 from app.orders.exceptions import OrderNotFoundError, InvalidOrderStatusError
 from app.cart.services import CartService
 from app.catalog.repositories import ProductVariantRepo
-from app.orders.models import Order, OrderItem
+from app.orders.models import Order, OrderItem, OrderStatus
+from app.core.exceptions import ForbiddenException
 from typing import Optional
 from uuid import UUID
 import logging
@@ -98,6 +99,46 @@ class OrderService:
 
     async def get_user_orders(self, user_id: UUID, skip: int = 0, limit: int = 20):
         return await self.order_repo.get_user_orders(user_id, skip, limit)
+
+    async def get_user_orders_filtered(
+            self,
+            user_id: UUID,
+            status_group: str = "all",
+            skip: int = 0,
+            limit: int = 20
+    ):
+        """
+        Возвращает заказы пользователя с фильтрацией по группе статусов.
+        """
+        return await self.order_repo.get_user_orders_by_group(
+            user_id, status_group, skip, limit
+        )
+
+    async def cancel_order_by_user(self, order_id: UUID, user_id: UUID):
+        """
+        Позволяет пользователю отменить собственный заказ в статусе PENDING.
+        """
+        order = await self.get_order(order_id)
+
+        if order.user_id != user_id:
+            raise ForbiddenException(detail="Cannot cancel another user's order")
+
+        if order.status != OrderStatus.PENDING:
+            raise InvalidOrderStatusError(
+                detail=f"Cannot cancel order in status {order.status}. Only pending orders can be cancelled."
+            )
+
+        # Возвращаем остатки на склад
+        for item in order.items:
+            variant = await self.variant_repo.read_by_id(item.variant_id)
+            if variant:
+                variant.stock_quantity += item.quantity
+
+        # Обновляем статус заказа
+        update_schema = OrderStatusUpdate(status=OrderStatus.CANCELLED.value)
+        await self.order_repo.update(update_schema, order_id, exclude_unset=True)
+
+        return await self.get_order(order_id)
 
     async def update_status(self, order_id: UUID, status: str):
         order = await self.get_order(order_id)
