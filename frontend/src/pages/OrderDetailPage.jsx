@@ -5,6 +5,7 @@ import { orderService } from '../services/orderService';
 import { Descriptions, List, Typography, Spin, Image, Tag, Button, Alert, Space, Divider } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { message } from 'antd';
+import { RotateLeftOutlined } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 
@@ -221,6 +222,37 @@ function OrderDetailPage() {
                     );
                 }}
             />
+            {order.status === 'delivered' && (() => {
+                const deliveryDate = new Date(order.updated_at || order.created_at);
+                const daysSinceDelivery = (new Date() - deliveryDate) / (1000 * 60 * 60 * 24);
+                const canReturn = daysSinceDelivery <= 14 && !order.has_returns;
+
+                return (
+                    <div style={{ marginTop: 24 }}>
+                        <Button
+                            type="primary"
+                            size="large"
+                            icon={<RotateLeftOutlined />}
+                            onClick={() => navigate(`/orders/${order.id}/return`)}
+                            disabled={!canReturn}
+                            block
+                        >
+                            {order.has_returns ? 'Возврат уже оформлен' : 'Вернуть товары'}
+                        </Button>
+                        <Text type="secondary" style={{
+                            display: 'block', textAlign: 'center',
+                            marginTop: 8, fontSize: 12
+                        }}>
+                            {canReturn
+                                ? `Возврат возможен в течение 14 дней с момента доставки (осталось ${Math.max(0, Math.ceil(14 - daysSinceDelivery))} дн.)`
+                                : daysSinceDelivery > 14
+                                    ? 'Срок возврата (14 дней) истёк'
+                                    : 'Возврат уже оформлен для этого заказа'
+                            }
+                        </Text>
+                    </div>
+                );
+            })()}
 
             {order.status === 'pending' && (
                 <Alert

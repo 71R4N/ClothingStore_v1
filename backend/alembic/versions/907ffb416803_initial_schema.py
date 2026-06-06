@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 63bd62ab4cc9
+Revision ID: 907ffb416803
 Revises: 
-Create Date: 2026-06-06 11:16:35.640704
+Create Date: 2026-06-06 12:27:44.658967
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '63bd62ab4cc9'
+revision: str = '907ffb416803'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -53,6 +53,7 @@ def upgrade() -> None:
     sa.Column('street', sa.String(length=255), nullable=True),
     sa.Column('city', sa.String(length=100), nullable=True),
     sa.Column('total', sa.Numeric(precision=10, scale=2, asdecimal=False), nullable=False),
+    sa.Column('has_returns', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('orders_user_id_fkey'), ondelete='SET NULL'),
@@ -124,6 +125,31 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], name=op.f('product_sizes_product_id_fkey'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('product_sizes_pkey'))
     )
+    op.create_table('returns',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('order_id', sa.UUID(), nullable=False),
+    sa.Column('user_id', sa.UUID(), nullable=True),
+    sa.Column('guest_email', sa.String(length=255), nullable=True),
+    sa.Column('status', sa.Enum('PENDING', 'APPROVED', 'REJECTED', 'REFUNDED', 'CANCELLED', 'FAILED', name='return_status_enum', create_constraint=True), nullable=False),
+    sa.Column('reason_type', sa.Enum('DEFECTIVE', 'WRONG_SIZE', 'WRONG_COLOR', 'CHANGED_MIND', 'OTHER', name='return_reason_enum', create_constraint=True), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('total_amount', sa.Numeric(precision=10, scale=2, asdecimal=False), nullable=False),
+    sa.Column('refund_payment_id', sa.String(length=100), nullable=True),
+    sa.Column('resolved_at', sa.DateTime(), nullable=True),
+    sa.Column('resolved_by', sa.UUID(), nullable=True),
+    sa.Column('rejection_reason', sa.Text(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], name=op.f('returns_order_id_fkey'), ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['resolved_by'], ['users.id'], name=op.f('returns_resolved_by_fkey'), ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('returns_user_id_fkey'), ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id', name=op.f('returns_pkey'))
+    )
+    op.create_index('ix_returns_order_status', 'returns', ['order_id', 'status'], unique=False)
+    op.create_index(op.f('returns_order_id_idx'), 'returns', ['order_id'], unique=False)
+    op.create_index(op.f('returns_refund_payment_id_idx'), 'returns', ['refund_payment_id'], unique=False)
+    op.create_index(op.f('returns_status_idx'), 'returns', ['status'], unique=False)
+    op.create_index(op.f('returns_user_id_idx'), 'returns', ['user_id'], unique=False)
     op.create_table('product_variants',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
@@ -194,12 +220,31 @@ def upgrade() -> None:
     )
     op.create_index(op.f('wishlists_session_id_idx'), 'wishlists', ['session_id'], unique=False)
     op.create_index(op.f('wishlists_user_id_idx'), 'wishlists', ['user_id'], unique=False)
+    op.create_table('return_items',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('return_id', sa.UUID(), nullable=False),
+    sa.Column('order_item_id', sa.UUID(), nullable=False),
+    sa.Column('variant_id', sa.Integer(), nullable=True),
+    sa.Column('quantity', sa.Integer(), nullable=False),
+    sa.Column('refund_amount', sa.Numeric(precision=10, scale=2, asdecimal=False), nullable=False),
+    sa.Column('photos', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['order_item_id'], ['order_items.id'], name=op.f('return_items_order_item_id_fkey'), ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['return_id'], ['returns.id'], name=op.f('return_items_return_id_fkey'), ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], name=op.f('return_items_variant_id_fkey'), ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id', name=op.f('return_items_pkey'))
+    )
+    op.create_index(op.f('return_items_order_item_id_idx'), 'return_items', ['order_item_id'], unique=False)
+    op.create_index(op.f('return_items_return_id_idx'), 'return_items', ['return_id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('return_items_return_id_idx'), table_name='return_items')
+    op.drop_index(op.f('return_items_order_item_id_idx'), table_name='return_items')
+    op.drop_table('return_items')
     op.drop_index(op.f('wishlists_user_id_idx'), table_name='wishlists')
     op.drop_index(op.f('wishlists_session_id_idx'), table_name='wishlists')
     op.drop_table('wishlists')
@@ -207,6 +252,12 @@ def downgrade() -> None:
     op.drop_table('order_items')
     op.drop_table('cart_items')
     op.drop_table('product_variants')
+    op.drop_index(op.f('returns_user_id_idx'), table_name='returns')
+    op.drop_index(op.f('returns_status_idx'), table_name='returns')
+    op.drop_index(op.f('returns_refund_payment_id_idx'), table_name='returns')
+    op.drop_index(op.f('returns_order_id_idx'), table_name='returns')
+    op.drop_index('ix_returns_order_status', table_name='returns')
+    op.drop_table('returns')
     op.drop_table('product_sizes')
     op.drop_table('product_colors')
     op.drop_index(op.f('payments_yookassa_payment_id_idx'), table_name='payments')

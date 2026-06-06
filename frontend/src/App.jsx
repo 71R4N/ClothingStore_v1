@@ -17,6 +17,9 @@ import TryOnPage from './pages/TryOnPage';
 import NotFoundPage from './pages/NotFoundPage';
 import WishlistPage from './pages/WishlistPage';
 import PaymentStatusPage from './pages/PaymentStatusPage';
+import ReturnRequestPage from './pages/ReturnRequestPage';
+import ReturnsPage from './pages/ReturnsPage';
+import ReturnDetailPage from './pages/ReturnDetailPage';
 
 function App() {
     return (
@@ -63,6 +66,30 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <OrderDetailPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/returns"
+                        element={
+                            <ProtectedRoute>
+                                <ReturnsPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/returns/:returnId"
+                        element={
+                            <ProtectedRoute>
+                                <ReturnDetailPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/orders/:orderId/return"
+                        element={
+                            <ProtectedRoute>
+                                <ReturnRequestPage />
                             </ProtectedRoute>
                         }
                     />

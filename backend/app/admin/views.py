@@ -8,6 +8,78 @@ from app.orders.models import Order, OrderItem
 from app.wishlist.models import Wishlist
 from app.tryon.models import TryOnSession
 from app.payments.models import Payment
+from app.returns.models import Return, ReturnItem
+
+
+class ReturnAdmin(ModelView, model=Return):
+    """Админ-представление для заявок на возврат."""
+    name = "Возврат"
+    name_plural = "Возвраты товаров"
+    icon = "fa-solid fa-rotate-left"
+
+    column_list = [
+        Return.id, Return.order_id, Return.user_id,
+        Return.status, Return.reason_type, Return.total_amount,
+        Return.created_at, Return.resolved_at
+    ]
+
+    column_details_list = [
+        Return.id, Return.order_id, Return.user_id, Return.guest_email,
+        Return.status, Return.reason_type, Return.description,
+        Return.total_amount, Return.refund_payment_id,
+        Return.rejection_reason, Return.created_at,
+        Return.updated_at, Return.resolved_at, Return.resolved_by
+    ]
+
+    column_searchable_list = [
+        Return.id, Return.guest_email, Return.status
+    ]
+    column_sortable_list = [
+        Return.created_at, Return.status, Return.total_amount
+    ]
+    column_default_sort = ("created_at", True)
+
+    column_formatters = {
+        Return.status: lambda m, v: m.status.value if m.status else "",
+        Return.reason_type: lambda m, v: (
+            m.reason_type.value if m.reason_type else ""
+        ),
+    }
+
+    form_choices = {
+        "status": [
+            ("pending", "Ожидает"),
+            ("approved", "Одобрено"),
+            ("rejected", "Отклонено"),
+            ("refunded", "Возвращено"),
+            ("cancelled", "Отменено"),
+            ("failed", "Ошибка"),
+        ],
+    }
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+    can_view_details = True
+
+
+class ReturnItemAdmin(ModelView, model=ReturnItem):
+    """Админ-представление для позиций возврата."""
+    name = "Позиция возврата"
+    name_plural = "Позиции возвратов"
+    icon = "fa-solid fa-list-check"
+
+    column_list = [
+        ReturnItem.id, ReturnItem.return_id,
+        ReturnItem.order_item_id, ReturnItem.variant_id,
+        ReturnItem.quantity, ReturnItem.refund_amount,
+        ReturnItem.created_at
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = False
+    can_view_details = True
 
 
 # ============================================================

@@ -8,7 +8,8 @@ from app.admin.views import (
     ProductSizeAdmin, ProductColorAdmin, ProductVariantAdmin,
     OrderAdmin, OrderItemAdmin, CartItemAdmin,
     WishlistAdmin, TryOnSessionAdmin,
-    PaymentAdmin,
+    PaymentAdmin, ReturnAdmin,
+    ReturnItemAdmin,
 )
 from app.core.config import settings
 
@@ -49,6 +50,9 @@ def setup_admin(app) -> Admin:
     admin.add_view(OrderAdmin)
     admin.add_view(OrderItemAdmin)
     admin.add_view(CartItemAdmin)
+
+    admin.add_view(ReturnAdmin)
+    admin.add_view(ReturnItemAdmin)
 
     # Прочее
     admin.add_view(WishlistAdmin)

@@ -96,3 +96,6 @@ class ProductVariant(Base):
     order_items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="variant")
     wishlist_items: Mapped[List["Wishlist"]] = relationship("Wishlist", back_populates="variant")
     tryon_sessions: Mapped[List["TryOnSession"]] = relationship("TryOnSession", back_populates="variant")
+    return_items: Mapped[List["ReturnItem"]] = relationship(
+        "ReturnItem", back_populates="variant"
+    )

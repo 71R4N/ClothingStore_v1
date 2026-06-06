@@ -32,6 +32,7 @@ class OrderRead(OrderBase):
     user_id: Optional[UUID]
     status: str
     total: float
+    has_returns: bool = False
     created_at: datetime
     updated_at: datetime
     items: List[OrderItemRead] = Field(default_factory=list)

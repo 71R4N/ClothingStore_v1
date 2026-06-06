@@ -124,6 +124,63 @@ class YooKassaClient:
             logger.error(f"YooKassa request error: {e}")
             raise YooKassaAPIError(f"Request error: {str(e)}")
 
+    async def create_refund(
+            self,
+            payment_id: str,
+            amount: float,
+            description: Optional[str] = None,
+    ) -> dict:
+        """
+        Создаёт возврат средств через YooKassa API.
+        Используется при одобрении заявки на возврат товара.
+        """
+        url = f"{self.BASE_URL}/refunds"
+        idempotence_key = str(uuid.uuid4())
+
+        refund_data = {
+            "payment_id": payment_id,
+            "amount": {
+                "value": f"{amount:.2f}",
+                "currency": "RUB"
+            },
+        }
+
+        if description:
+            refund_data["description"] = description[:128]
+
+        logger.info(
+            f"Creating YooKassa refund for payment {payment_id}, "
+            f"amount: {amount}"
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    url,
+                    json=refund_data,
+                    auth=self._get_auth(),
+                    headers=self._get_headers(idempotence_key)
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                logger.info(
+                    f"YooKassa refund created: {result.get('id')}, "
+                    f"status: {result.get('status')}"
+                )
+                return result
+
+        except httpx.HTTPStatusError as e:
+            error_text = e.response.text
+            logger.error(
+                f"YooKassa refund API error: "
+                f"{e.response.status_code} - {error_text}"
+            )
+            raise YooKassaAPIError(f"Refund API error: {error_text}")
+        except httpx.RequestError as e:
+            logger.error(f"YooKassa refund request error: {e}")
+            raise YooKassaAPIError(f"Refund request error: {str(e)}")
+
     async def cancel_payment(self, payment_id: str) -> dict:
         """Отменяет платеж."""
         url = f"{self.BASE_URL}/payments/{payment_id}/cancel"

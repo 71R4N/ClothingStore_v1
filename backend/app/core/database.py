@@ -54,3 +54,4 @@ from app.orders.models import Order, OrderItem
 from app.wishlist.models import Wishlist
 from app.tryon.models import TryOnSession
 from app.payments.models import Payment
+from app.returns.models import Return, ReturnItem

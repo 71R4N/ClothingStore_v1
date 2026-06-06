@@ -8,6 +8,7 @@ celery = Celery(
     include=[
         "worker.tasks.tryon",
         "worker.tasks.cleanup",
+        "worker.tasks.returns",
     ]
 )
 

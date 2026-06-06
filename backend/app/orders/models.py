@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import ForeignKey, String, Numeric, Enum as SAEnum, Integer
+from sqlalchemy import ForeignKey, String, Numeric, Enum as SAEnum, Integer, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base, CreatedAtCol
@@ -38,6 +38,9 @@ class Order(Base):
     street: Mapped[Optional[str]] = mapped_column(String(255))
     city: Mapped[Optional[str]] = mapped_column(String(100))
     total: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
+    has_returns: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     created_at: Mapped[CreatedAtCol]
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.utcnow,
@@ -54,6 +57,11 @@ class Order(Base):
     )
     payments: Mapped[List["Payment"]] = relationship(
         "Payment",
+        back_populates="order",
+        cascade="all, delete-orphan"
+    )
+    returns: Mapped[List["Return"]] = relationship(
+        "Return",
         back_populates="order",
         cascade="all, delete-orphan"
     )
@@ -84,4 +92,9 @@ class OrderItem(Base):
     variant: Mapped[Optional["ProductVariant"]] = relationship(
         "ProductVariant",
         back_populates="order_items"
+    )
+    return_items: Mapped[List["ReturnItem"]] = relationship(
+        "ReturnItem",
+        back_populates="order_item",
+        cascade="all, delete-orphan"
     )

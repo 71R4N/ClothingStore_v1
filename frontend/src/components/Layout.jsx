@@ -1,4 +1,3 @@
-// frontend/src/components/Layout.jsx
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -9,7 +8,7 @@ import {
     ShoppingCartOutlined, UserOutlined, HomeOutlined, MenuOutlined,
     CloseOutlined, ShopOutlined, OrderedListOutlined, LoginOutlined,
     LogoutOutlined, ExperimentOutlined, AppstoreOutlined,
-    HeartOutlined, HeartFilled, DownOutlined
+    HeartOutlined, HeartFilled, DownOutlined, RotateLeftOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
@@ -142,6 +141,11 @@ function Layout({ children }) {
                     label: <Link to="/orders" onClick={handleMenuClick}>Мои заказы</Link>
                 },
                 {
+                    key: 'returns',
+                    icon: <RotateLeftOutlined />,
+                    label: <Link to="/returns" onClick={handleMenuClick}>Мои возвраты</Link>
+                },
+                {
                     key: 'wishlist',
                     icon: <HeartOutlined />,
                     label: <Link to="/wishlist" onClick={handleMenuClick}>Избранное</Link>
@@ -249,6 +253,12 @@ function Layout({ children }) {
                                             icon={<OrderedListOutlined style={{ fontSize: 20, color: '#fff' }} />}
                                             onClick={() => navigate('/orders')}
                                             title="Мои заказы"
+                                        />
+                                        <Button
+                                            type="text"
+                                            icon={<RotateLeftOutlined style={{ fontSize: 20, color: '#fff' }} />}
+                                            onClick={() => navigate('/returns')}
+                                            title="Мои возвраты"
                                         />
                                         <Button
                                             type="text"
