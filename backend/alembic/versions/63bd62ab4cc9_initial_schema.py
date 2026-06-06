@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 604cd5e268f4
+Revision ID: 63bd62ab4cc9
 Revises: 
-Create Date: 2026-06-05 17:31:49.840228
+Create Date: 2026-06-06 11:16:35.640704
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '604cd5e268f4'
+revision: str = '63bd62ab4cc9'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -120,7 +120,6 @@ def upgrade() -> None:
     sa.Column('chest_cm', sa.String(length=50), nullable=True),
     sa.Column('waist_cm', sa.String(length=50), nullable=True),
     sa.Column('hips_cm', sa.String(length=50), nullable=True),
-    sa.Column('label_size', sa.String(length=50), nullable=True),
     sa.Column('height_cm', sa.String(length=50), nullable=True),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], name=op.f('product_sizes_product_id_fkey'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('product_sizes_pkey'))

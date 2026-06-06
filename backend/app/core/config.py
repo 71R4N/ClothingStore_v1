@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     YOOKASSA_RETURN_URL: str = "http://localhost:5173/payment/status"
     YOOKASSA_CANCEL_URL: str = "http://localhost:5173/payment/status"
 
+    SESSION_SECRET_KEY: str = "change-me-in-production"
+    ADMIN_SECRET_KEY: str = "change-me-in-production"
+
     # CatVTON
     CATVTON_API_URL: str = "http://localhost:8001"
     CATVTON_TIMEOUT: int = 300

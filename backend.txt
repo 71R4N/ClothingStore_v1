@@ -97,12 +97,12 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     ${downgrades if downgrades else "pass"}
-===== backend/alembic/versions/604cd5e268f4_initial_schema.py =====
+===== backend/alembic/versions/63bd62ab4cc9_initial_schema.py =====
 """initial schema
 
-Revision ID: 604cd5e268f4
+Revision ID: 63bd62ab4cc9
 Revises: 
-Create Date: 2026-06-05 17:31:49.840228
+Create Date: 2026-06-06 11:16:35.640704
 
 """
 from typing import Sequence, Union
@@ -112,7 +112,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '604cd5e268f4'
+revision: str = '63bd62ab4cc9'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -220,7 +220,6 @@ def upgrade() -> None:
     sa.Column('chest_cm', sa.String(length=50), nullable=True),
     sa.Column('waist_cm', sa.String(length=50), nullable=True),
     sa.Column('hips_cm', sa.String(length=50), nullable=True),
-    sa.Column('label_size', sa.String(length=50), nullable=True),
     sa.Column('height_cm', sa.String(length=50), nullable=True),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], name=op.f('product_sizes_product_id_fkey'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('product_sizes_pkey'))
@@ -512,6 +511,494 @@ datefmt = %H:%M:%S
 ; [formatter_generic]
 ; format = %(levelname)-5.5s [%(name)s] %(message)s
 ; datefmt = %H:%M:%S
+===== backend/app/admin/auth.py =====
+# backend/app/admin/auth.py
+from sqladmin.authentication import AuthenticationBackend
+from starlette.requests import Request
+from app.core.security import decode_access_token, verify_password
+from app.users.services import UserService
+from app.users.repositories import UserRepo
+from app.core.database import AsyncSessionLocal
+from app.core.config import settings
+from uuid import UUID
+from itsdangerous import TimestampSigner, BadSignature
+import json
+
+
+class AdminAuth(AuthenticationBackend):
+    """
+    Backend аутентификации для SQLAdmin.
+    """
+
+    async def login(self, request: Request) -> bool:
+        form = await request.form()
+        email = form.get("username")
+        password = form.get("password")
+
+        print(f"[ADMIN LOGIN] Attempt for email: {email}")
+        print(f"[ADMIN LOGIN] Secret key used: '{settings.SESSION_SECRET_KEY}'")
+
+        if not email or not password:
+            print("[ADMIN LOGIN] Failed: empty credentials")
+            return False
+
+        async with AsyncSessionLocal() as session:
+            user_repo = UserRepo(session)
+            user_svc = UserService(user_repo)
+            try:
+                user = await user_svc.get_by_email(email)
+                if not user:
+                    print(f"[ADMIN LOGIN] Failed: user {email} not found")
+                    return False
+
+                if not verify_password(password, user.password_hash):
+                    print(f"[ADMIN LOGIN] Failed: invalid password for {email}")
+                    return False
+
+                if user.role != "admin":
+                    print(f"[ADMIN LOGIN] Failed: user {email} role is '{user.role}'")
+                    return False
+
+                if not user.is_active:
+                    print(f"[ADMIN LOGIN] Failed: user {email} is inactive")
+                    return False
+
+                request.session.update({"admin_user_id": str(user.id)})
+                print(f"[ADMIN LOGIN] Success. Session dict now: {dict(request.session)}")
+                return True
+
+            except Exception as e:
+                print(f"[ADMIN LOGIN] Exception: {type(e).__name__}: {e}")
+                return False
+
+    async def logout(self, request: Request) -> bool:
+        request.session.clear()
+        return True
+
+    async def authenticate(self, request: Request) -> bool:
+        print(f"\n--- [ADMIN AUTH] Request path: {request.url.path} ---")
+        print(f"[ADMIN AUTH] Secret key used: '{settings.SESSION_SECRET_KEY}'")
+        print(f"[ADMIN AUTH] Starlette Session keys: {list(request.session.keys())}")
+
+        session_cookie = request.cookies.get("session")
+        print(f"[ADMIN AUTH] Raw 'session' cookie present: {bool(session_cookie)}")
+
+        if session_cookie:
+            try:
+                # Starlette использует TimestampSigner, так как max_age по умолчанию 14 дней
+                signer = TimestampSigner(settings.SESSION_SECRET_KEY)
+                # Пытаемся расшифровать вручную
+                decoded_bytes = signer.unsign(session_cookie, max_age=14 * 24 * 60 * 60)
+                decoded_dict = json.loads(decoded_bytes.decode("utf-8"))
+                print(f"[ADMIN AUTH] Manually decoded session: {decoded_dict}")
+            except BadSignature as e:
+                print(f"[ADMIN AUTH] BadSignature (cookie invalid or expired): {e}")
+            except Exception as e:
+                print(f"[ADMIN AUTH] Manual decode error: {type(e).__name__}: {e}")
+
+        admin_user_id = request.session.get("admin_user_id")
+
+        if not admin_user_id:
+            # Fallback на JWT
+            token = request.cookies.get("access_token")
+            if not token:
+                auth_header = request.headers.get("Authorization")
+                if auth_header and auth_header.startswith("Bearer "):
+                    token = auth_header.split(" ")[1]
+
+            if token:
+                payload = decode_access_token(token)
+                if payload and "sub" in payload:
+                    admin_user_id = payload["sub"]
+                    print(f"[ADMIN AUTH] Fallback to JWT: found user_id {admin_user_id}")
+
+        if not admin_user_id:
+            print("[ADMIN AUTH] Failed: no admin_user_id found in session or JWT")
+            return False
+
+        async with AsyncSessionLocal() as session:
+            user_repo = UserRepo(session)
+            user_svc = UserService(user_repo)
+            try:
+                user = await user_svc.get_by_id(UUID(admin_user_id))
+                if user and user.role == "admin" and user.is_active:
+                    request.session.update({"admin_user_id": str(user.id)})
+                    print(f"[ADMIN AUTH] Success for user {user.email}")
+                    return True
+                print(f"[ADMIN AUTH] Failed: user not found, inactive or not admin.")
+                return False
+            except Exception as e:
+                print(f"[ADMIN AUTH] DB Exception: {type(e).__name__}: {e}")
+                return False
+===== backend/app/admin/views.py =====
+from sqladmin import ModelView
+from app.users.models import User, UserSession
+from app.catalog.models import (
+    Category, Product, ProductSize, ProductColor, ProductVariant
+)
+from app.cart.models import CartItem
+from app.orders.models import Order, OrderItem
+from app.wishlist.models import Wishlist
+from app.tryon.models import TryOnSession
+from app.payments.models import Payment
+
+
+# ============================================================
+# ПОЛЬЗОВАТЕЛИ
+# ============================================================
+class UserAdmin(ModelView, model=User):
+    """Админ-представление для модели User."""
+
+    name = "Пользователь"
+    name_plural = "Пользователи"
+    icon = "fa-solid fa-user"
+
+    column_list = [
+        User.id, User.email, User.first_name, User.last_name,
+        User.phone, User.role, User.is_active, User.created_at
+    ]
+    column_details_list = [
+        User.id, User.email, User.first_name, User.last_name,
+        User.phone, User.role, User.is_active, User.created_at
+    ]
+    form_columns = [
+        "email", "first_name", "last_name", "phone",
+        "role", "is_active"
+    ]
+    column_searchable_list = [User.email, User.first_name, User.last_name]
+    column_sortable_list = [User.email, User.created_at, User.role]
+    column_default_sort = ("created_at", True)
+
+    can_create = True
+    can_edit = True
+    can_delete = True
+    can_view_details = True
+
+    form_choices = {
+        "role": [("user", "Пользователь"), ("admin", "Администратор")],
+    }
+
+
+class UserSessionAdmin(ModelView, model=UserSession):
+    """Админ-представление для сессий пользователей."""
+
+    name = "Сессия"
+    name_plural = "Сессии пользователей"
+    icon = "fa-solid fa-key"
+
+    column_list = [
+        UserSession.id, UserSession.user_id,
+        UserSession.expires_at, UserSession.created_at
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+# ============================================================
+# КАТАЛОГ
+# ============================================================
+class CategoryAdmin(ModelView, model=Category):
+    """Админ-представление для категорий."""
+
+    name = "Категория"
+    name_plural = "Категории"
+    icon = "fa-solid fa-folder"
+
+    column_list = [
+        Category.id, Category.name, Category.slug,
+        Category.parent_id, Category.description
+    ]
+    form_columns = [
+        "name", "slug", "parent_id", "description", "image_url"
+    ]
+    column_searchable_list = [Category.name, Category.slug]
+    column_sortable_list = [Category.name, Category.id]
+
+    can_create = True
+    can_edit = True
+    can_delete = True
+
+
+class ProductAdmin(ModelView, model=Product):
+    """Админ-представление для товаров."""
+
+    name = "Товар"
+    name_plural = "Товары"
+    icon = "fa-solid fa-shirt"
+
+    column_list = [
+        Product.id, Product.name, Product.slug,
+        Product.category_id, Product.brand,
+        Product.is_active, Product.created_at
+    ]
+    form_columns = [
+        "name", "slug", "description", "category_id",
+        "brand", "brand_logo", "is_active"
+    ]
+    column_searchable_list = [Product.name, Product.slug, Product.brand]
+    column_sortable_list = [Product.name, Product.created_at, Product.is_active]
+    column_default_sort = ("created_at", True)
+
+    can_create = True
+    can_edit = True
+    can_delete = True
+
+
+class ProductSizeAdmin(ModelView, model=ProductSize):
+    """Админ-представление для размеров."""
+
+    name = "Размер"
+    name_plural = "Размеры товаров"
+    icon = "fa-solid fa-ruler"
+
+    column_list = [
+        ProductSize.id, ProductSize.product_id,
+        ProductSize.size_label
+    ]
+    form_columns = [
+        "product_id", "size_label", "chest_cm",
+        "waist_cm", "hips_cm", "height_cm"
+    ]
+
+
+class ProductColorAdmin(ModelView, model=ProductColor):
+    """Админ-представление для цветов."""
+
+    name = "Цвет"
+    name_plural = "Цвета товаров"
+    icon = "fa-solid fa-palette"
+
+    column_list = [
+        ProductColor.id, ProductColor.product_id,
+        ProductColor.color_name, ProductColor.color_hex
+    ]
+    form_columns = ["product_id", "color_name", "color_hex"]
+
+
+class ProductVariantAdmin(ModelView, model=ProductVariant):
+    """Админ-представление для вариантов товаров (SKU)."""
+
+    name = "Вариант"
+    name_plural = "Варианты товаров"
+    icon = "fa-solid fa-tags"
+
+    column_list = [
+        ProductVariant.id, ProductVariant.sku,
+        ProductVariant.product_id, ProductVariant.color_id,
+        ProductVariant.size_id, ProductVariant.price,
+        ProductVariant.stock_quantity
+    ]
+    form_columns = [
+        "product_id", "color_id", "size_id", "sku",
+        "price", "stock_quantity", "image_url", "attributes"
+    ]
+    column_searchable_list = [ProductVariant.sku]
+    column_sortable_list = [ProductVariant.price, ProductVariant.stock_quantity]
+
+
+# ============================================================
+# ЗАКАЗЫ И КОРЗИНА
+# ============================================================
+class OrderAdmin(ModelView, model=Order):
+    """Админ-представление для заказов."""
+
+    name = "Заказ"
+    name_plural = "Заказы"
+    icon = "fa-solid fa-shopping-bag"
+
+    column_list = [
+        Order.id, Order.user_id, Order.guest_email,
+        Order.status, Order.total, Order.city,
+        Order.created_at
+    ]
+    form_columns = [
+        "user_id", "guest_email", "status",
+        "street", "city", "total"
+    ]
+    column_searchable_list = [Order.guest_email, Order.id]
+    column_sortable_list = [Order.created_at, Order.total, Order.status]
+    column_default_sort = ("created_at", True)
+
+    column_formatters = {
+        Order.status: lambda m, v: m.status.value if m.status else "",
+    }
+
+    form_choices = {
+        "status": [
+            ("pending", "Ожидает обработки"),
+            ("processing", "В обработке"),
+            ("shipped", "Отправлен"),
+            ("delivered", "Доставлен"),
+            ("cancelled", "Отменён"),
+        ],
+    }
+
+    can_create = False
+    can_edit = True
+    can_delete = True
+
+
+class OrderItemAdmin(ModelView, model=OrderItem):
+    """Админ-представление для позиций заказа."""
+
+    name = "Позиция заказа"
+    name_plural = "Позиции заказов"
+    icon = "fa-solid fa-list"
+
+    column_list = [
+        OrderItem.id, OrderItem.order_id,
+        OrderItem.variant_id, OrderItem.quantity,
+        OrderItem.price_at_purchase
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = False
+
+
+class CartItemAdmin(ModelView, model=CartItem):
+    """Админ-представление для корзины."""
+
+    name = "Позиция корзины"
+    name_plural = "Корзины"
+    icon = "fa-solid fa-cart-shopping"
+
+    column_list = [
+        CartItem.id, CartItem.user_id,
+        CartItem.variant_id, CartItem.quantity,
+        CartItem.added_at
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+# ============================================================
+# WISHLIST И ПРИМЕРКА
+# ============================================================
+class WishlistAdmin(ModelView, model=Wishlist):
+    """Админ-представление для списка желаний."""
+
+    name = "Желание"
+    name_plural = "Избранное"
+    icon = "fa-solid fa-heart"
+
+    column_list = [
+        Wishlist.id, Wishlist.user_id,
+        Wishlist.variant_id, Wishlist.created_at
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+class TryOnSessionAdmin(ModelView, model=TryOnSession):
+    """Админ-представление для сессий виртуальной примерки."""
+
+    name = "Примерка"
+    name_plural = "Сессии примерки"
+    icon = "fa-solid fa-camera"
+
+    column_list = [
+        TryOnSession.id, TryOnSession.user_id,
+        TryOnSession.variant_id, TryOnSession.status,
+        TryOnSession.duration_ms, TryOnSession.created_at
+    ]
+    column_searchable_list = [TryOnSession.status]
+    column_sortable_list = [TryOnSession.created_at, TryOnSession.status]
+    column_default_sort = ("created_at", True)
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+# ============================================================
+# ПЛАТЕЖИ
+# ============================================================
+class PaymentAdmin(ModelView, model=Payment):
+    """Админ-представление для платежей."""
+
+    name = "Платёж"
+    name_plural = "Платежи"
+    icon = "fa-solid fa-credit-card"
+
+    column_list = [
+        Payment.id, Payment.order_id,
+        Payment.yookassa_payment_id, Payment.amount,
+        Payment.status, Payment.payment_method,
+        Payment.is_test, Payment.created_at
+    ]
+    column_searchable_list = [Payment.yookassa_payment_id, Payment.order_id]
+    column_sortable_list = [Payment.created_at, Payment.amount, Payment.status]
+    column_default_sort = ("created_at", True)
+
+    can_create = False
+    can_edit = False
+    can_delete = False
+===== backend/app/admin/__init__.py =====
+# backend/app/admin/__init__.py
+from sqladmin import Admin
+from app.core.database import engine
+from app.admin.auth import AdminAuth
+from app.admin.views import (
+    UserAdmin, UserSessionAdmin,
+    CategoryAdmin, ProductAdmin,
+    ProductSizeAdmin, ProductColorAdmin, ProductVariantAdmin,
+    OrderAdmin, OrderItemAdmin, CartItemAdmin,
+    WishlistAdmin, TryOnSessionAdmin,
+    PaymentAdmin,
+)
+from app.core.config import settings
+
+
+def setup_admin(app) -> Admin:
+    """
+    Инициализирует и настраивает админ-панель SQLAdmin.
+
+    Args:
+        app: экземпляр FastAPI приложения
+
+    Returns:
+        Настроенный экземпляр Admin
+    """
+    admin = Admin(
+        app=app,
+        engine=engine,
+        title="CatVTON Admin",
+        base_url="/admin",
+        authentication_backend=AdminAuth(
+            secret_key=settings.ADMIN_SECRET_KEY
+        ),
+    )
+
+    # Регистрация представлений моделей
+    # Пользователи
+    admin.add_view(UserAdmin)
+    admin.add_view(UserSessionAdmin)
+
+    # Каталог
+    admin.add_view(CategoryAdmin)
+    admin.add_view(ProductAdmin)
+    admin.add_view(ProductSizeAdmin)
+    admin.add_view(ProductColorAdmin)
+    admin.add_view(ProductVariantAdmin)
+
+    # Заказы и корзина
+    admin.add_view(OrderAdmin)
+    admin.add_view(OrderItemAdmin)
+    admin.add_view(CartItemAdmin)
+
+    # Прочее
+    admin.add_view(WishlistAdmin)
+    admin.add_view(TryOnSessionAdmin)
+    admin.add_view(PaymentAdmin)
+
+    return admin
 ===== backend/app/api/v1/__init__.py =====
 from fastapi import APIRouter
 from app.auth.routes import router as auth_router
@@ -860,7 +1347,7 @@ class AuthService:
         if not user or not verify_password(password, user.password_hash):
             try:
                 new_attempts = attempts + 1
-                await redis_client.setex(attempts_key, 3600, str(new_attempts))
+                await redis_client.setex(attempts_key, 60, str(new_attempts))
             except Exception as e:
                 logger.error(f"Redis error during login attempts update: {e}")
             raise InvalidCredentialsError()
@@ -1311,7 +1798,6 @@ class ProductSize(Base):
     chest_cm: Mapped[Optional[str]] = mapped_column(String(50))
     waist_cm: Mapped[Optional[str]] = mapped_column(String(50))
     hips_cm: Mapped[Optional[str]] = mapped_column(String(50))
-    label_size: Mapped[Optional[str]] = mapped_column(String(50))
     height_cm: Mapped[Optional[str]] = mapped_column(String(50))
 
     product: Mapped[Product] = relationship("Product", back_populates="sizes")
@@ -1799,6 +2285,9 @@ class Settings(BaseSettings):
     YOOKASSA_RETURN_URL: str = "http://localhost:5173/payment/status"
     YOOKASSA_CANCEL_URL: str = "http://localhost:5173/payment/status"
 
+    SESSION_SECRET_KEY: str = "change-me-in-production"
+    ADMIN_SECRET_KEY: str = "change-me-in-production"
+
     # CatVTON
     CATVTON_API_URL: str = "http://localhost:8001"
     CATVTON_TIMEOUT: int = 300
@@ -1899,39 +2388,77 @@ class UnauthorizedException(BaseAppException):
     status_code = status.HTTP_401_UNAUTHORIZED
     detail = "Not authenticated"
 ===== backend/app/core/middleware.py =====
-from fastapi import Request, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-PUBLIC_PATHS = [
+PUBLIC_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/register",
     "/api/v1/auth/refresh",
     "/api/v1/auth/csrf",
     "/api/v1/auth/logout",
-]
+}
+
+# Пути, которые полностью обходят CSRF-проверку
+ADMIN_PATHS_PREFIX = "/admin"
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
-class CSRFMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+class CSRFMiddleware:
+    """
+    Pure ASGI middleware для проверки CSRF-токена.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
         # Пропускаем безопасные методы
-        if request.method in ["GET", "HEAD", "OPTIONS"]:
-            return await call_next(request)
+        if scope["method"] in SAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
+        path = request.url.path
 
         # Пропускаем публичные эндпоинты
-        if request.url.path in PUBLIC_PATHS:
-            return await call_next(request)
+        if path in PUBLIC_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        # Пропускаем запросы к админ-панели SQLAdmin
+        if path.startswith(ADMIN_PATHS_PREFIX):
+            await self.app(scope, receive, send)
+            return
 
         # Получаем CSRF из cookie и из заголовка
         csrf_cookie = request.cookies.get("csrf_token")
         csrf_header = request.headers.get("X-CSRF-Token")
 
         if not csrf_cookie or not csrf_header:
-            raise HTTPException(status_code=403, detail="CSRF token missing")
+            response = JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF token missing"}
+            )
+            await response(scope, receive, send)
+            return
 
         if csrf_cookie != csrf_header:
-            raise HTTPException(status_code=403, detail="CSRF token invalid")
+            response = JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF token invalid"}
+            )
+            await response(scope, receive, send)
+            return
 
-        return await call_next(request)===== backend/app/core/redis_client.py =====
+        # Всё ок — передаём дальше
+        await self.app(scope, receive, send)
+===== backend/app/core/redis_client.py =====
 import redis.asyncio as redis
 from app.core.config import settings
 
@@ -2447,13 +2974,13 @@ import os
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
 from app.api.v1 import v1_router
 from app.core.redis_client import redis_client
 from app.core.middleware import CSRFMiddleware
 from app.core.config import settings
+from app.admin import setup_admin
 from contextlib import asynccontextmanager
-from app.core.redis_client import redis_client
-from fastapi.staticfiles import StaticFiles
 
 
 @asynccontextmanager
@@ -2462,8 +2989,20 @@ async def lifespan(app: FastAPI):
     yield
     await redis_client.disconnect()
 
+
 app = FastAPI(title="CatVTON Shop", version="0.1.0", lifespan=lifespan)
+
+# Middleware для сессий (требуется для аутентификации SQLAdmin)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SESSION_SECRET_KEY
+)
+
+# CSRF Middleware (исключаем /admin из проверки)
+# Примечание: нужно обновить CSRFMiddleware, чтобы он пропускал /admin
 app.add_middleware(CSRFMiddleware)
+
+# CORS
 origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -2472,19 +3011,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API-роутеры
 app.include_router(v1_router, prefix="/api/v1")
+
+# Статические файлы
 app.mount("/images", StaticFiles(directory="static/images"), name="images")
 os.makedirs("static/tryon_results", exist_ok=True)
 app.mount("/tryon_results", StaticFiles(directory="static/tryon_results"), name="tryon_results")
+
+
+# Инициализация админ-панели
+setup_admin(app)
+
 
 @app.on_event("startup")
 async def startup():
     await redis_client.connect()
 
+
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
-===== backend/app/orders/dependencies.py =====
+    return {"status": "ok"}===== backend/app/orders/dependencies.py =====
 from typing import Annotated
 from fastapi import Depends
 from app.core.database import SessionDbDep
@@ -2608,7 +3156,7 @@ class OrderItem(Base):
         back_populates="order_items"
     )===== backend/app/orders/repositories.py =====
 from app.core.repository import SqlAlchemyRepo
-from app.orders.models import Order, OrderItem
+from app.orders.models import Order, OrderItem, OrderStatus
 from app.catalog.models import ProductVariant
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -2631,11 +3179,52 @@ class OrderRepo(SqlAlchemyRepo):
         stmt = (
             select(self.model)
             .where(self.model.user_id == user_id)
-            .options(selectinload(self.model.items))
+            .options(
+                selectinload(self.model.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+                selectinload(self.model.items).selectinload(OrderItem.variant).selectinload(ProductVariant.color),
+                selectinload(self.model.items).selectinload(OrderItem.variant).selectinload(ProductVariant.size),
+            )
             .order_by(self.model.created_at.desc())
             .offset(skip)
             .limit(limit)
         )
+        result = await self.session.execute(stmt)
+        return result.scalars().unique().all()
+
+    async def get_user_orders_by_group(
+            self,
+            user_id: UUID,
+            status_group: str = "all",
+            skip: int = 0,
+            limit: int = 20
+    ):
+        """
+        Получает заказы пользователя с фильтрацией по группе статусов.
+        Обеспечивает жадную загрузку связанных сущностей для предотвращения 
+        ошибок MissingGreenlet при асинхронной сериализации.
+        """
+        status_filters = {
+            "active": [OrderStatus.PENDING, OrderStatus.PROCESSING, OrderStatus.SHIPPED],
+            "history": [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+            "all": None
+        }
+
+        stmt = (
+            select(self.model)
+            .where(self.model.user_id == user_id)
+            .options(
+                # Жадная загрузка позиций заказа и связанных атрибутов варианта
+                selectinload(self.model.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+                selectinload(self.model.items).selectinload(OrderItem.variant).selectinload(ProductVariant.color),
+                selectinload(self.model.items).selectinload(OrderItem.variant).selectinload(ProductVariant.size),
+            )
+            .order_by(self.model.created_at.desc())
+        )
+
+        if status_group in status_filters and status_filters[status_group] is not None:
+            stmt = stmt.where(self.model.status.in_(status_filters[status_group]))
+
+        stmt = stmt.offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return result.scalars().unique().all()
 
@@ -2649,6 +3238,7 @@ from app.orders.dependencies import OrderServiceDep
 from app.auth.dependencies import OptionalUserDep, CurrentUserDep
 from uuid import UUID
 from app.core.exceptions import ForbiddenException
+from typing import Literal
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -2661,7 +3251,6 @@ async def create_order(
         session_id: str | None = Cookie(None)
 ):
     user_id = current_user.id if current_user else None
-
     order = await order_svc.create_order(user_id, session_id, data)
     return order
 
@@ -2676,11 +3265,13 @@ async def get_order(
 
     # Проверка доступа: только владелец или админ
     if current_user:
+        # Заказ принадлежит пользователю
         if order.user_id and order.user_id != current_user.id and current_user.role != "admin":
-            raise ForbiddenException()
-    elif order.user_id:
-        # Гость пытается получить заказ авторизованного пользователя
-        raise ForbiddenException()
+            raise ForbiddenException(detail="You can only view your own orders")
+    else:
+        # Гость пытается получить заказ - запрещаем
+        if order.user_id:
+            raise ForbiddenException(detail="Authentication required")
 
     return order
 
@@ -2689,10 +3280,32 @@ async def get_order(
 async def list_orders(
         order_svc: OrderServiceDep,
         current_user: CurrentUserDep,
+        status_group: Literal["active", "history", "all"] = Query(
+            "all",
+            description="Фильтр по группе статусов: active (ожидающие), history (завершённые), all (все)"
+        ),
         skip: int = Query(0, ge=0),
         limit: int = Query(20, ge=1, le=100)
 ):
-    return await order_svc.get_user_orders(current_user.id, skip, limit)
+    """
+    Возвращает список заказов текущего пользователя.
+    Поддерживает фильтрацию по группе статусов.
+    """
+    return await order_svc.get_user_orders_filtered(
+        current_user.id, status_group, skip, limit
+    )
+
+
+@router.post("/{order_id}/cancel", response_model=OrderRead)
+async def cancel_order_by_user(
+        order_id: UUID,
+        order_svc: OrderServiceDep,
+        current_user: CurrentUserDep
+):
+    """
+    Позволяет пользователю отменить собственный заказ в статусе PENDING.
+    """
+    return await order_svc.cancel_order_by_user(order_id, current_user.id)
 
 
 @router.patch("/{order_id}/status", response_model=OrderRead)
@@ -2704,7 +3317,6 @@ async def update_status(
 ):
     if current_user.role != "admin":
         raise ForbiddenException()
-
     return await order_svc.update_status(order_id, data.status)
 ===== backend/app/orders/schemas.py =====
 from pydantic import BaseModel, Field
@@ -2754,7 +3366,8 @@ from app.orders.schemas import OrderCreate, OrderStatusUpdate
 from app.orders.exceptions import OrderNotFoundError, InvalidOrderStatusError
 from app.cart.services import CartService
 from app.catalog.repositories import ProductVariantRepo
-from app.orders.models import Order, OrderItem
+from app.orders.models import Order, OrderItem, OrderStatus
+from app.core.exceptions import ForbiddenException
 from typing import Optional
 from uuid import UUID
 import logging
@@ -2850,6 +3463,46 @@ class OrderService:
     async def get_user_orders(self, user_id: UUID, skip: int = 0, limit: int = 20):
         return await self.order_repo.get_user_orders(user_id, skip, limit)
 
+    async def get_user_orders_filtered(
+            self,
+            user_id: UUID,
+            status_group: str = "all",
+            skip: int = 0,
+            limit: int = 20
+    ):
+        """
+        Возвращает заказы пользователя с фильтрацией по группе статусов.
+        """
+        return await self.order_repo.get_user_orders_by_group(
+            user_id, status_group, skip, limit
+        )
+
+    async def cancel_order_by_user(self, order_id: UUID, user_id: UUID):
+        """
+        Позволяет пользователю отменить собственный заказ в статусе PENDING.
+        """
+        order = await self.get_order(order_id)
+
+        if order.user_id != user_id:
+            raise ForbiddenException(detail="Cannot cancel another user's order")
+
+        if order.status != OrderStatus.PENDING:
+            raise InvalidOrderStatusError(
+                detail=f"Cannot cancel order in status {order.status}. Only pending orders can be cancelled."
+            )
+
+        # Возвращаем остатки на склад
+        for item in order.items:
+            variant = await self.variant_repo.read_by_id(item.variant_id)
+            if variant:
+                variant.stock_quantity += item.quantity
+
+        # Обновляем статус заказа
+        update_schema = OrderStatusUpdate(status=OrderStatus.CANCELLED.value)
+        await self.order_repo.update(update_schema, order_id, exclude_unset=True)
+
+        return await self.get_order(order_id)
+
     async def update_status(self, order_id: UUID, status: str):
         order = await self.get_order(order_id)
 
@@ -2869,7 +3522,8 @@ class OrderService:
 
         update_schema = OrderStatusUpdate(status=status)
         await self.order_repo.update(update_schema, order_id, exclude_unset=True)
-        return await self.get_order(order_id)===== backend/app/orders/__init__.py =====
+        return await self.get_order(order_id)
+===== backend/app/orders/__init__.py =====
 ===== backend/app/payments/client.py =====
 import httpx
 import uuid
@@ -4649,10 +5303,11 @@ celery = "^5.3.0"
 httpx = "^0.27.0"             # для внешних API (Т-банк)
 passlib = "^1.7.4"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
-bcrypt = "^4.1.0"
+bcrypt = "4.0.1"
 python-multipart = "^0.0.9"   # для загрузки файлов
 pillow = "^10.2.0"            # обработка изображений
 aiofiles = "^23.2.1"          # асинхронная работа с файлами
+sqladmin = {version = "0.16.1", extras = ["full"]}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

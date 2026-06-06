@@ -57,7 +57,6 @@ class ProductSize(Base):
     chest_cm: Mapped[Optional[str]] = mapped_column(String(50))
     waist_cm: Mapped[Optional[str]] = mapped_column(String(50))
     hips_cm: Mapped[Optional[str]] = mapped_column(String(50))
-    label_size: Mapped[Optional[str]] = mapped_column(String(50))
     height_cm: Mapped[Optional[str]] = mapped_column(String(50))
 
     product: Mapped[Product] = relationship("Product", back_populates="sizes")

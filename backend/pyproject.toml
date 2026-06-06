@@ -22,10 +22,11 @@ celery = "^5.3.0"
 httpx = "^0.27.0"             # для внешних API (Т-банк)
 passlib = "^1.7.4"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
-bcrypt = "^4.1.0"
+bcrypt = "4.0.1"
 python-multipart = "^0.0.9"   # для загрузки файлов
 pillow = "^10.2.0"            # обработка изображений
 aiofiles = "^23.2.1"          # асинхронная работа с файлами
+sqladmin = {version = "0.16.1", extras = ["full"]}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

@@ -80,7 +80,7 @@ class AuthService:
         if not user or not verify_password(password, user.password_hash):
             try:
                 new_attempts = attempts + 1
-                await redis_client.setex(attempts_key, 3600, str(new_attempts))
+                await redis_client.setex(attempts_key, 60, str(new_attempts))
             except Exception as e:
                 logger.error(f"Redis error during login attempts update: {e}")
             raise InvalidCredentialsError()

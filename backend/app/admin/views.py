@@ -1,0 +1,309 @@
+from sqladmin import ModelView
+from app.users.models import User, UserSession
+from app.catalog.models import (
+    Category, Product, ProductSize, ProductColor, ProductVariant
+)
+from app.cart.models import CartItem
+from app.orders.models import Order, OrderItem
+from app.wishlist.models import Wishlist
+from app.tryon.models import TryOnSession
+from app.payments.models import Payment
+
+
+# ============================================================
+# ПОЛЬЗОВАТЕЛИ
+# ============================================================
+class UserAdmin(ModelView, model=User):
+    """Админ-представление для модели User."""
+
+    name = "Пользователь"
+    name_plural = "Пользователи"
+    icon = "fa-solid fa-user"
+
+    column_list = [
+        User.id, User.email, User.first_name, User.last_name,
+        User.phone, User.role, User.is_active, User.created_at
+    ]
+    column_details_list = [
+        User.id, User.email, User.first_name, User.last_name,
+        User.phone, User.role, User.is_active, User.created_at
+    ]
+    form_columns = [
+        "email", "first_name", "last_name", "phone",
+        "role", "is_active"
+    ]
+    column_searchable_list = [User.email, User.first_name, User.last_name]
+    column_sortable_list = [User.email, User.created_at, User.role]
+    column_default_sort = ("created_at", True)
+
+    can_create = True
+    can_edit = True
+    can_delete = True
+    can_view_details = True
+
+    form_choices = {
+        "role": [("user", "Пользователь"), ("admin", "Администратор")],
+    }
+
+
+class UserSessionAdmin(ModelView, model=UserSession):
+    """Админ-представление для сессий пользователей."""
+
+    name = "Сессия"
+    name_plural = "Сессии пользователей"
+    icon = "fa-solid fa-key"
+
+    column_list = [
+        UserSession.id, UserSession.user_id,
+        UserSession.expires_at, UserSession.created_at
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+# ============================================================
+# КАТАЛОГ
+# ============================================================
+class CategoryAdmin(ModelView, model=Category):
+    """Админ-представление для категорий."""
+
+    name = "Категория"
+    name_plural = "Категории"
+    icon = "fa-solid fa-folder"
+
+    column_list = [
+        Category.id, Category.name, Category.slug,
+        Category.parent_id, Category.description
+    ]
+    form_columns = [
+        "name", "slug", "parent_id", "description", "image_url"
+    ]
+    column_searchable_list = [Category.name, Category.slug]
+    column_sortable_list = [Category.name, Category.id]
+
+    can_create = True
+    can_edit = True
+    can_delete = True
+
+
+class ProductAdmin(ModelView, model=Product):
+    """Админ-представление для товаров."""
+
+    name = "Товар"
+    name_plural = "Товары"
+    icon = "fa-solid fa-shirt"
+
+    column_list = [
+        Product.id, Product.name, Product.slug,
+        Product.category_id, Product.brand,
+        Product.is_active, Product.created_at
+    ]
+    form_columns = [
+        "name", "slug", "description", "category_id",
+        "brand", "brand_logo", "is_active"
+    ]
+    column_searchable_list = [Product.name, Product.slug, Product.brand]
+    column_sortable_list = [Product.name, Product.created_at, Product.is_active]
+    column_default_sort = ("created_at", True)
+
+    can_create = True
+    can_edit = True
+    can_delete = True
+
+
+class ProductSizeAdmin(ModelView, model=ProductSize):
+    """Админ-представление для размеров."""
+
+    name = "Размер"
+    name_plural = "Размеры товаров"
+    icon = "fa-solid fa-ruler"
+
+    column_list = [
+        ProductSize.id, ProductSize.product_id,
+        ProductSize.size_label
+    ]
+    form_columns = [
+        "product_id", "size_label", "chest_cm",
+        "waist_cm", "hips_cm", "height_cm"
+    ]
+
+
+class ProductColorAdmin(ModelView, model=ProductColor):
+    """Админ-представление для цветов."""
+
+    name = "Цвет"
+    name_plural = "Цвета товаров"
+    icon = "fa-solid fa-palette"
+
+    column_list = [
+        ProductColor.id, ProductColor.product_id,
+        ProductColor.color_name, ProductColor.color_hex
+    ]
+    form_columns = ["product_id", "color_name", "color_hex"]
+
+
+class ProductVariantAdmin(ModelView, model=ProductVariant):
+    """Админ-представление для вариантов товаров (SKU)."""
+
+    name = "Вариант"
+    name_plural = "Варианты товаров"
+    icon = "fa-solid fa-tags"
+
+    column_list = [
+        ProductVariant.id, ProductVariant.sku,
+        ProductVariant.product_id, ProductVariant.color_id,
+        ProductVariant.size_id, ProductVariant.price,
+        ProductVariant.stock_quantity
+    ]
+    form_columns = [
+        "product_id", "color_id", "size_id", "sku",
+        "price", "stock_quantity", "image_url", "attributes"
+    ]
+    column_searchable_list = [ProductVariant.sku]
+    column_sortable_list = [ProductVariant.price, ProductVariant.stock_quantity]
+
+
+# ============================================================
+# ЗАКАЗЫ И КОРЗИНА
+# ============================================================
+class OrderAdmin(ModelView, model=Order):
+    """Админ-представление для заказов."""
+
+    name = "Заказ"
+    name_plural = "Заказы"
+    icon = "fa-solid fa-shopping-bag"
+
+    column_list = [
+        Order.id, Order.user_id, Order.guest_email,
+        Order.status, Order.total, Order.city,
+        Order.created_at
+    ]
+    form_columns = [
+        "user_id", "guest_email", "status",
+        "street", "city", "total"
+    ]
+    column_searchable_list = [Order.guest_email, Order.id]
+    column_sortable_list = [Order.created_at, Order.total, Order.status]
+    column_default_sort = ("created_at", True)
+
+    column_formatters = {
+        Order.status: lambda m, v: m.status.value if m.status else "",
+    }
+
+    form_choices = {
+        "status": [
+            ("pending", "Ожидает обработки"),
+            ("processing", "В обработке"),
+            ("shipped", "Отправлен"),
+            ("delivered", "Доставлен"),
+            ("cancelled", "Отменён"),
+        ],
+    }
+
+    can_create = False
+    can_edit = True
+    can_delete = True
+
+
+class OrderItemAdmin(ModelView, model=OrderItem):
+    """Админ-представление для позиций заказа."""
+
+    name = "Позиция заказа"
+    name_plural = "Позиции заказов"
+    icon = "fa-solid fa-list"
+
+    column_list = [
+        OrderItem.id, OrderItem.order_id,
+        OrderItem.variant_id, OrderItem.quantity,
+        OrderItem.price_at_purchase
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = False
+
+
+class CartItemAdmin(ModelView, model=CartItem):
+    """Админ-представление для корзины."""
+
+    name = "Позиция корзины"
+    name_plural = "Корзины"
+    icon = "fa-solid fa-cart-shopping"
+
+    column_list = [
+        CartItem.id, CartItem.user_id,
+        CartItem.variant_id, CartItem.quantity,
+        CartItem.added_at
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+# ============================================================
+# WISHLIST И ПРИМЕРКА
+# ============================================================
+class WishlistAdmin(ModelView, model=Wishlist):
+    """Админ-представление для списка желаний."""
+
+    name = "Желание"
+    name_plural = "Избранное"
+    icon = "fa-solid fa-heart"
+
+    column_list = [
+        Wishlist.id, Wishlist.user_id,
+        Wishlist.variant_id, Wishlist.created_at
+    ]
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+class TryOnSessionAdmin(ModelView, model=TryOnSession):
+    """Админ-представление для сессий виртуальной примерки."""
+
+    name = "Примерка"
+    name_plural = "Сессии примерки"
+    icon = "fa-solid fa-camera"
+
+    column_list = [
+        TryOnSession.id, TryOnSession.user_id,
+        TryOnSession.variant_id, TryOnSession.status,
+        TryOnSession.duration_ms, TryOnSession.created_at
+    ]
+    column_searchable_list = [TryOnSession.status]
+    column_sortable_list = [TryOnSession.created_at, TryOnSession.status]
+    column_default_sort = ("created_at", True)
+
+    can_create = False
+    can_edit = False
+    can_delete = True
+
+
+# ============================================================
+# ПЛАТЕЖИ
+# ============================================================
+class PaymentAdmin(ModelView, model=Payment):
+    """Админ-представление для платежей."""
+
+    name = "Платёж"
+    name_plural = "Платежи"
+    icon = "fa-solid fa-credit-card"
+
+    column_list = [
+        Payment.id, Payment.order_id,
+        Payment.yookassa_payment_id, Payment.amount,
+        Payment.status, Payment.payment_method,
+        Payment.is_test, Payment.created_at
+    ]
+    column_searchable_list = [Payment.yookassa_payment_id, Payment.order_id]
+    column_sortable_list = [Payment.created_at, Payment.amount, Payment.status]
+    column_default_sort = ("created_at", True)
+
+    can_create = False
+    can_edit = False
+    can_delete = False
