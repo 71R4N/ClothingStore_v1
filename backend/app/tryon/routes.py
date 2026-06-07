@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Query, Depends
+# backend/app/tryon/routes.py
+from fastapi import APIRouter, Query
 from app.tryon.schemas import TryOnRequest, TryOnSessionRead
 from app.tryon.dependencies import TryOnServiceDep
 from app.auth.dependencies import OptionalUserDep
 from app.catalog.repositories import ProductVariantRepo
+from app.core.database import SessionDbDep
 from uuid import UUID
 from app.core.exceptions import ForbiddenException
 import logging
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/try-on", tags=["tryon"])
 
 
@@ -17,17 +18,17 @@ async def create_tryon(
         data: TryOnRequest,
         tryon_svc: TryOnServiceDep,
         current_user: OptionalUserDep,
-        variant_repo: ProductVariantRepo = Depends(lambda: ProductVariantRepo(None))  # Временно
+        session: SessionDbDep,  # ИСПРАВЛЕНО: внедрение активной сессии БД
 ):
-    # Проверяем существование варианта
+    variant_repo = ProductVariantRepo(session)
     variant = await variant_repo.read_by_id(data.variant_id)
     if not variant:
         from app.catalog.exceptions import ProductNotFoundError
         raise ProductNotFoundError(detail="Product variant not found")
-    # Используем изображение варианта как garment_image
+
     garment_image_url = variant.image_url or data.garment_image_url
-    # Создаем сессию
     user_id = current_user.id if current_user else None
+
     request_data = TryOnRequest(
         variant_id=data.variant_id,
         person_image_url=data.person_image_url,
@@ -35,19 +36,18 @@ async def create_tryon(
         mask_image_url=data.mask_image_url
     )
 
-    session = await tryon_svc.create_session(user_id, request_data)
+    session_obj = await tryon_svc.create_session(user_id, request_data)
 
-    # Запускаем обработку в фоне
     try:
         from worker.tasks.tryon import process_tryon_session
-        process_tryon_session.delay(str(session.id))
-        logger.info(f"Celery task queued for session {session.id}")
+        process_tryon_session.delay(str(session_obj.id))
+        logger.info(f"Celery task queued for session {session_obj.id}")
     except Exception as e:
         logger.warning(f"Celery not available, processing synchronously: {e}")
-        await tryon_svc.process_session(session.id)
-        session = await tryon_svc.get_session(session.id)
+        await tryon_svc.process_session(session_obj.id)
 
-    return session
+    session_obj = await tryon_svc.get_session(session_obj.id)
+    return session_obj
 
 
 @router.get("/sessions/{session_id}", response_model=TryOnSessionRead)
@@ -56,15 +56,13 @@ async def get_session(
         tryon_svc: TryOnServiceDep,
         current_user: OptionalUserDep
 ):
-    session = await tryon_svc.get_session(session_id)
-    # Проверка доступа
+    session_obj = await tryon_svc.get_session(session_id)
     if current_user:
-        if session.user_id and session.user_id != current_user.id:
+        if session_obj.user_id and session_obj.user_id != current_user.id:
             raise ForbiddenException()
-    elif session.user_id:
+    elif session_obj.user_id:
         raise ForbiddenException()
-
-    return session
+    return session_obj
 
 
 @router.get("/sessions", response_model=list[TryOnSessionRead])
@@ -76,6 +74,4 @@ async def list_sessions(
 ):
     if current_user:
         return await tryon_svc.get_user_sessions(current_user.id, skip, limit)
-    else:
-        # Для гостей возвращаем пустой список
-        return []
+    return []

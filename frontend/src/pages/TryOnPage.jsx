@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { catalogService } from '../services/catalogService';
 import { tryonService } from '../services/tryonService';
-import { uploadService } from '../services/uploadService'; // Убедитесь, что этот сервис создан
-import { 
-  Upload, Button, Image, Spin, Typography, Space, Alert, Card, message, Select 
+import { uploadService } from '../services/uploadService';
+import {
+  Upload, Button, Image, Spin, Typography, Space, Alert, Card, message, Select, Progress
 } from 'antd';
-import { UploadOutlined, CameraOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import {
+  CameraOutlined, LoadingOutlined, DownloadOutlined
+} from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 const { Dragger } = Upload;
@@ -14,8 +16,7 @@ const { Dragger } = Upload;
 function TryOnPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  
-  // Получаем variant_id из URL (?variant=123)
+
   const variantIdParam = searchParams.get('variant');
   const productSlugParam = searchParams.get('product');
 
@@ -23,18 +24,14 @@ function TryOnPage() {
   const [submitting, setSubmitting] = useState(false);
   const [product, setProduct] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
-  
   const [personImageFile, setPersonImageFile] = useState(null);
   const [personImagePreview, setPersonImagePreview] = useState(null);
-  
   const [sessionId, setSessionId] = useState(null);
   const [sessionStatus, setSessionStatus] = useState(null);
   const [resultImage, setResultImage] = useState(null);
   const [polling, setPolling] = useState(false);
 
-  // Загрузка данных товара и варианта
   useEffect(() => {
-    console.log('TryOnPage mounted', { variantIdParam, productSlugParam });
     if (!variantIdParam && !productSlugParam) {
       message.warning('Пожалуйста, выберите товар для примерки из каталога');
       return;
@@ -48,16 +45,12 @@ function TryOnPage() {
           const res = await catalogService.getProductBySlug(productSlugParam);
           prodData = res.data;
         } else {
-          // Если передан только ID варианта, нам все равно нужно найти продукт
-          // В идеале нужен эндпоинт getVariantById, но пока найдем через список или slug
-          // Для простоты предположим, что фронтенд всегда передает slug
           message.error('Некорректные параметры запроса');
           return;
         }
 
         setProduct(prodData);
-        
-        // Ищем нужный вариант
+
         if (variantIdParam) {
           const variant = prodData.variants?.find(v => v.id === parseInt(variantIdParam));
           if (variant) {
@@ -66,7 +59,6 @@ function TryOnPage() {
             message.error('Выбранный вариант товара не найден');
           }
         } else if (prodData.variants?.length > 0) {
-          // Если вариант не указан, берем первый доступный
           setSelectedVariant(prodData.variants[0]);
         }
       } catch (e) {
@@ -86,9 +78,10 @@ function TryOnPage() {
       message.error('Можно загружать только изображения');
       return false;
     }
+
     setPersonImageFile(file);
     setPersonImagePreview(URL.createObjectURL(file));
-    return false; // Предотвращаем автоматическую загрузку
+    return false;
   };
 
   const startTryOn = async () => {
@@ -98,22 +91,20 @@ function TryOnPage() {
     }
 
     setSubmitting(true);
+
     try {
-      // 1. Загружаем фото пользователя на сервер
       const uploadRes = await uploadService.uploadImage(personImageFile);
-      
-      // 2. Создаем сессию примерки
+
       const res = await tryonService.createSession({
         variant_id: selectedVariant.id,
         person_image_url: uploadRes.data.url,
-        garment_image_url: selectedVariant.image_url, // Берем картинку варианта
+        garment_image_url: selectedVariant.image_url,
       });
 
       setSessionId(res.data.id);
       setSessionStatus(res.data.status);
       message.success('Примерка запущена! Обработка может занять до 30 секунд.');
-      
-      // 3. Запускаем опрос статуса
+
       pollSession(res.data.id);
     } catch (e) {
       console.error(e);
@@ -129,7 +120,7 @@ function TryOnPage() {
       try {
         const res = await tryonService.getSession(id);
         setSessionStatus(res.data.status);
-        
+
         if (res.data.status === 'completed') {
           setResultImage(res.data.result_image_url);
           setPolling(false);
@@ -142,7 +133,6 @@ function TryOnPage() {
         }
       } catch (err) {
         console.error(err);
-        // Не прерываем опрос при одной ошибке сети
       }
     }, 2000);
   };
@@ -167,15 +157,14 @@ function TryOnPage() {
 
       <Card style={{ marginTop: 24, borderRadius: 20 }}>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          
-          {/* Информация о товаре */}
           <div>
             <Text strong>Выбранный товар:</Text>
             <div style={{ display: 'flex', gap: 16, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Image 
-                src={selectedVariant.image_url || 'https://via.placeholder.com/100'} 
-                width={80} 
-                style={{ borderRadius: 12 }} 
+              <Image
+                src={selectedVariant.image_url || 'https://via.placeholder.com/100'}
+                width={80}
+                style={{ borderRadius: 12 }}
+                preview={false}
               />
               <div>
                 <div style={{ fontWeight: 600 }}>{product.name}</div>
@@ -185,8 +174,7 @@ function TryOnPage() {
                 <div style={{ color: '#ff4d4f', fontWeight: 500 }}>{selectedVariant.price} ₽</div>
               </div>
             </div>
-            
-            {/* Выбор другого варианта, если их несколько */}
+
             {product.variants && product.variants.length > 1 && (
               <div style={{ marginTop: 16 }}>
                 <Text>Сменить вариант:</Text>
@@ -206,7 +194,6 @@ function TryOnPage() {
             )}
           </div>
 
-          {/* Загрузка фото */}
           <div>
             <Text strong>Ваше фото (в полный рост, светлый фон лучше)</Text>
             <Dragger
@@ -226,7 +213,6 @@ function TryOnPage() {
             </Dragger>
           </div>
 
-          {/* Кнопка запуска */}
           <Button
             type="primary"
             size="large"
@@ -239,7 +225,6 @@ function TryOnPage() {
             {submitting ? 'Загрузка...' : 'Примерить'}
           </Button>
 
-          {/* Статус обработки */}
           {polling && (
             <Alert
               message="Обработка нейросетью"
@@ -255,20 +240,33 @@ function TryOnPage() {
             />
           )}
 
-          {/* Результат */}
           {resultImage && (
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               <Text strong>Результат примерки:</Text>
               <div style={{ marginTop: 8 }}>
-                <Image 
-                  src={resultImage} 
-                  style={{ maxWidth: '100%', maxHeight: 500, borderRadius: 24, objectFit: 'contain' }} 
+                <img
+                  src={resultImage}
+                  alt="Результат примерки"
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: 500,
+                    borderRadius: 24,
+                    objectFit: 'contain',
+                    display: 'block',
+                    margin: '0 auto'
+                  }}
+                  onError={(e) => {
+                    console.error('Failed to load result image:', resultImage);
+                    e.target.style.display = 'none';
+                    message.error('Не удалось загрузить изображение результата');
+                  }}
                 />
               </div>
-              <Button 
-                type="link" 
-                href={resultImage} 
+              <Button
+                type="link"
+                href={resultImage}
                 download={`tryon-${sessionId}.png`}
+                icon={<DownloadOutlined />}
                 style={{ marginTop: 16 }}
               >
                 Скачать результат
