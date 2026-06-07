@@ -136,3 +136,31 @@ class ReturnItem(Base):
     variant: Mapped[Optional["ProductVariant"]] = relationship(
         "ProductVariant", back_populates="return_items"
     )
+
+    @property
+    def product_name(self) -> Optional[str]:
+        """Возвращает название товара из связанного варианта."""
+        if self.variant and self.variant.product:
+            return self.variant.product.name
+        return None
+
+    @property
+    def size_label(self) -> Optional[str]:
+        """Возвращает размер из связанного варианта."""
+        if self.variant and self.variant.size:
+            return self.variant.size.size_label
+        return None
+
+    @property
+    def color_name(self) -> Optional[str]:
+        """Возвращает цвет из связанного варианта."""
+        if self.variant and self.variant.color:
+            return self.variant.color.color_name
+        return None
+
+    @property
+    def image_url(self) -> Optional[str]:
+        """Возвращает URL изображения варианта."""
+        if self.variant:
+            return self.variant.image_url
+        return None

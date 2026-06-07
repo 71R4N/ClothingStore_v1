@@ -1,4 +1,10 @@
-from sqladmin import ModelView
+from sqladmin import ModelView, action
+from sqladmin.helpers import get_object_identifier
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
+from typing import Any, List
+from uuid import UUID
+
 from app.users.models import User, UserSession
 from app.catalog.models import (
     Category, Product, ProductSize, ProductColor, ProductVariant
@@ -9,6 +15,11 @@ from app.wishlist.models import Wishlist
 from app.tryon.models import TryOnSession
 from app.payments.models import Payment
 from app.returns.models import Return, ReturnItem
+from app.core.database import AsyncSessionLocal
+from app.returns.repositories import ReturnRepo, ReturnItemRepo
+from app.orders.repositories import OrderRepo, OrderItemRepo
+from app.catalog.repositories import ProductVariantRepo
+from app.returns.services import ReturnService
 
 
 class ReturnAdmin(ModelView, model=Return):
@@ -16,13 +27,11 @@ class ReturnAdmin(ModelView, model=Return):
     name = "Возврат"
     name_plural = "Возвраты товаров"
     icon = "fa-solid fa-rotate-left"
-
     column_list = [
         Return.id, Return.order_id, Return.user_id,
         Return.status, Return.reason_type, Return.total_amount,
         Return.created_at, Return.resolved_at
     ]
-
     column_details_list = [
         Return.id, Return.order_id, Return.user_id, Return.guest_email,
         Return.status, Return.reason_type, Return.description,
@@ -30,7 +39,6 @@ class ReturnAdmin(ModelView, model=Return):
         Return.rejection_reason, Return.created_at,
         Return.updated_at, Return.resolved_at, Return.resolved_by
     ]
-
     column_searchable_list = [
         Return.id, Return.guest_email, Return.status
     ]
@@ -38,14 +46,12 @@ class ReturnAdmin(ModelView, model=Return):
         Return.created_at, Return.status, Return.total_amount
     ]
     column_default_sort = ("created_at", True)
-
     column_formatters = {
         Return.status: lambda m, v: m.status.value if m.status else "",
         Return.reason_type: lambda m, v: (
             m.reason_type.value if m.reason_type else ""
         ),
     }
-
     form_choices = {
         "status": [
             ("pending", "Ожидает"),
@@ -56,11 +62,95 @@ class ReturnAdmin(ModelView, model=Return):
             ("failed", "Ошибка"),
         ],
     }
-
     can_create = False
     can_edit = False
     can_delete = True
     can_view_details = True
+
+    @action(
+        name="approve",
+        label="Одобрить",
+        confirmation_message="Одобрить выбранные заявки на возврат? Товары будут возвращены на склад, а средства — отправлены на возврат.",
+    )
+    async def approve_action(self, request: Request) -> RedirectResponse:
+        """
+        Массовое одобрение заявок на возврат.
+        Возвращает RedirectResponse для корректной работы маршрутов Starlette.
+        """
+        pks = request.query_params.getlist("pks")
+        # Формируем URL для редиректа: возвращаемся на предыдущую страницу
+        redirect_url = request.headers.get("referer", "/admin/return/list")
+
+        if not pks:
+            return RedirectResponse(url=redirect_url, status_code=303)
+
+        async with AsyncSessionLocal() as session:
+            return_repo = ReturnRepo(session)
+            return_item_repo = ReturnItemRepo(session)
+            order_repo = OrderRepo(session)
+            order_item_repo = OrderItemRepo(session)
+            variant_repo = ProductVariantRepo(session)
+            service = ReturnService(
+                return_repo=return_repo,
+                return_item_repo=return_item_repo,
+                order_repo=order_repo,
+                order_item_repo=order_item_repo,
+                variant_repo=variant_repo,
+            )
+            admin_id_str = request.session.get("admin_user_id")
+            admin_id = UUID(admin_id_str) if admin_id_str else None
+
+            for pk in pks:
+                try:
+                    return_id = UUID(str(pk))
+                    await service.approve_return(return_id, admin_id)
+                except Exception:
+                    # Ошибки бизнес-логики логируются внутри сервисного слоя
+                    pass
+
+        return RedirectResponse(url=redirect_url, status_code=303)
+
+    @action(
+        name="reject",
+        label="Отклонить",
+        confirmation_message="Отклонить выбранные заявки? Будет указана стандартная причина отклонения.",
+    )
+    async def reject_action(self, request: Request) -> RedirectResponse:
+        """
+        Массовое отклонение заявок со стандартной причиной.
+        """
+        pks = request.query_params.getlist("pks")
+        redirect_url = request.headers.get("referer", "/admin/return/list")
+
+        if not pks:
+            return RedirectResponse(url=redirect_url, status_code=303)
+
+        rejection_reason = "Заявка отклонена администратором. Для уточнения причины свяжитесь с поддержкой."
+
+        async with AsyncSessionLocal() as session:
+            return_repo = ReturnRepo(session)
+            return_item_repo = ReturnItemRepo(session)
+            order_repo = OrderRepo(session)
+            order_item_repo = OrderItemRepo(session)
+            variant_repo = ProductVariantRepo(session)
+            service = ReturnService(
+                return_repo=return_repo,
+                return_item_repo=return_item_repo,
+                order_repo=order_repo,
+                order_item_repo=order_item_repo,
+                variant_repo=variant_repo,
+            )
+            admin_id_str = request.session.get("admin_user_id")
+            admin_id = UUID(admin_id_str) if admin_id_str else None
+
+            for pk in pks:
+                try:
+                    return_id = UUID(str(pk))
+                    await service.reject_return(return_id, admin_id, rejection_reason)
+                except Exception:
+                    pass
+
+        return RedirectResponse(url=redirect_url, status_code=303)
 
 
 class ReturnItemAdmin(ModelView, model=ReturnItem):

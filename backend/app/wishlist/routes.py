@@ -1,9 +1,9 @@
+# backend/app/wishlist/routes.py
 from fastapi import APIRouter, Request, Response, Cookie
 from app.wishlist.schemas import WishlistCreate, WishlistRead
 from app.wishlist.dependencies import WishlistServiceDep
 from app.auth.dependencies import OptionalUserDep, CurrentUserDep
 from uuid import UUID
-
 
 router = APIRouter(prefix="/wishlist", tags=["wishlist"])
 
@@ -33,6 +33,7 @@ async def add_to_wishlist(
 ):
     user_id = current_user.id if current_user else None
 
+    # Если пользователь не авторизован и нет сессии — создаём новую
     if not user_id and not session_id:
         import secrets
         session_id = secrets.token_urlsafe(32)
@@ -44,10 +45,12 @@ async def add_to_wishlist(
             max_age=30 * 24 * 60 * 60
         )
 
+    # ✅ ИСПРАВЛЕНО: для авторизованных пользователей session_id не передаётся,
+    # так как в БД у их записей session_id = NULL
     return await wishlist_svc.add_item(
         data=data,
         user_id=user_id,
-        session_id=session_id
+        session_id=session_id if not user_id else None
     )
 
 
@@ -65,8 +68,9 @@ async def remove_from_wishlist(
         from app.core.exceptions import UnauthorizedException
         raise UnauthorizedException()
 
+    # ✅ ИСПРАВЛЕНО: для авторизованных пользователей session_id не передаётся
     await wishlist_svc.remove_item(
         variant_id=variant_id,
         user_id=user_id,
-        session_id=session_id
+        session_id=session_id if not user_id else None
     )

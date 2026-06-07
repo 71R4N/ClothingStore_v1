@@ -24,7 +24,6 @@ class WishlistRepo(SqlAlchemyRepo):
         self.session.add(new_item)
         await self.session.commit()
 
-        # Жадная загрузка связей для предотвращения MissingGreenlet при сериализации
         stmt = select(self.model).where(self.model.id == new_item.id).options(
             selectinload(self.model.variant).selectinload(ProductVariant.product),
             selectinload(self.model.variant).selectinload(ProductVariant.color),
@@ -52,10 +51,10 @@ class WishlistRepo(SqlAlchemyRepo):
         return result.scalars().unique().all()
 
     async def find_item(
-        self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None,
-        variant_id: Optional[int] = None
+            self,
+            user_id: Optional[UUID] = None,
+            session_id: Optional[str] = None,
+            variant_id: Optional[int] = None
     ) -> Wishlist | None:
         stmt = select(self.model).where(self.model.variant_id == variant_id)
         if user_id:
@@ -66,10 +65,10 @@ class WishlistRepo(SqlAlchemyRepo):
         return result.scalar_one_or_none()
 
     async def remove_item(
-        self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None,
-        variant_id: Optional[int] = None
+            self,
+            user_id: Optional[UUID] = None,
+            session_id: Optional[str] = None,
+            variant_id: Optional[int] = None
     ):
         stmt = delete(self.model).where(self.model.variant_id == variant_id)
         if user_id:
@@ -77,4 +76,22 @@ class WishlistRepo(SqlAlchemyRepo):
         if session_id:
             stmt = stmt.where(self.model.session_id == session_id)
         await self.session.execute(stmt)
+        await self.session.commit()
+
+    async def clear_session_wishlist(self, session_id: str):
+        """Удаляет все товары из гостевого избранного при выходе из аккаунта."""
+        stmt = delete(self.model).where(self.model.session_id == session_id)
+        await self.session.execute(stmt)
+        await self.session.commit()
+
+    async def merge_session_wishlist_to_user(self, user_id: UUID, session_id: str):
+        """При регистрации переносим избранное сессии пользователю."""
+        session_items = await self.get_session_wishlist(session_id)
+        for item in session_items:
+            existing = await self.find_item(user_id, None, item.variant_id)
+            if not existing:
+                item.user_id = user_id
+                item.session_id = None
+            else:
+                await self.session.delete(item)
         await self.session.commit()

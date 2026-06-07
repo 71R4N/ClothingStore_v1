@@ -1245,12 +1245,15 @@ class InvalidCaptchaError(HTTPException):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid captcha. Please try again."
         )===== backend/app/auth/routes.py =====
-from fastapi import APIRouter, Request, Response, HTTPException, status
+from fastapi import APIRouter, Request, Response, HTTPException, status, Cookie
 from app.auth.schemas import LoginRequest, TokenResponse, RegisterRequest
 from app.auth.dependencies import UserServiceDep
 from app.auth.services import AuthService
 from app.core.security import create_access_token, create_refresh_token, decode_refresh_token, generate_csrf_token
 from app.core.config import settings
+from app.core.database import SessionDbDep
+from app.cart.repositories import CartRepo
+from app.wishlist.repositories import WishlistRepo
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -1259,15 +1262,24 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def register(
         response: Response,
         data: RegisterRequest,
-        user_svc: UserServiceDep
+        user_svc: UserServiceDep,
+        session_id: str | None = Cookie(None),
+        session: SessionDbDep = None,
 ):
     auth_svc = AuthService(user_svc)
     user_id = await auth_svc.register(data)
-    user = await user_svc.get_by_id(user_id)
 
+    # При регистрации переносим гостевую корзину и избранное в новый аккаунт
+    if session_id and session:
+        cart_repo = CartRepo(session)
+        wishlist_repo = WishlistRepo(session)
+
+        await cart_repo.merge_session_cart_to_user(user_id, session_id)
+        await wishlist_repo.merge_session_wishlist_to_user(user_id, session_id)
+
+    user = await user_svc.get_by_id(user_id)
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
-
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
@@ -1276,13 +1288,14 @@ async def register(
         samesite="lax",
         max_age=7 * 24 * 60 * 60
     )
+    # Очищаем гостевую сессию после регистрации
+    response.delete_cookie("session_id")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.get("/csrf")
 async def get_csrf_token(response: Response):
     csrf_token = generate_csrf_token()
-
     response.set_cookie(
         key="csrf_token",
         value=csrf_token,
@@ -1302,20 +1315,15 @@ async def login(
         user_svc: UserServiceDep
 ):
     auth_svc = AuthService(user_svc)
-
-    # Получаем IP клиента для защиты от брутфорса
     client_ip = request.client.host if request.client else None
-
     user = await auth_svc.authenticate(
         email=data.email,
         password=data.password,
         captcha_response=data.captcha_response,
         client_ip=client_ip
     )
-
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
-
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
@@ -1324,14 +1332,29 @@ async def login(
         samesite="lax",
         max_age=7 * 24 * 60 * 60
     )
-
+    # При входе в существующий аккаунт НЕ переносим данные из гостевой сессии
+    # Просто очищаем гостевую сессию
+    response.delete_cookie("session_id")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(
+        response: Response,
+        session_id: str | None = Cookie(None),
+        session: SessionDbDep = None,
+):
+    # При выходе из аккаунта очищаем гостевую корзину и избранное
+    if session_id and session:
+        cart_repo = CartRepo(session)
+        wishlist_repo = WishlistRepo(session)
+
+        await cart_repo.clear_cart(None, session_id)
+        await wishlist_repo.clear_session_wishlist(session_id)
+
     response.delete_cookie("refresh_token")
     response.delete_cookie("csrf_token")
+    response.delete_cookie("session_id")
     return {"status": "ok"}
 
 
@@ -1343,15 +1366,12 @@ async def refresh_token(
     refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing")
-
     payload = decode_refresh_token(refresh_token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-
     user_id = payload["sub"]
     new_access_token = create_access_token(data={"sub": user_id})
     new_refresh_token = create_refresh_token(data={"sub": user_id})
-
     response.set_cookie(
         key="refresh_token",
         value=new_refresh_token,
@@ -1360,7 +1380,8 @@ async def refresh_token(
         samesite="lax",
         max_age=7 * 24 * 60 * 60
     )
-    return {"access_token": new_access_token, "token_type": "bearer"}===== backend/app/auth/schemas.py =====
+    return {"access_token": new_access_token, "token_type": "bearer"}
+===== backend/app/auth/schemas.py =====
 from pydantic import BaseModel, EmailStr, field_validator
 import re
 
@@ -4779,6 +4800,34 @@ class ReturnItem(Base):
     variant: Mapped[Optional["ProductVariant"]] = relationship(
         "ProductVariant", back_populates="return_items"
     )
+
+    @property
+    def product_name(self) -> Optional[str]:
+        """Возвращает название товара из связанного варианта."""
+        if self.variant and self.variant.product:
+            return self.variant.product.name
+        return None
+
+    @property
+    def size_label(self) -> Optional[str]:
+        """Возвращает размер из связанного варианта."""
+        if self.variant and self.variant.size:
+            return self.variant.size.size_label
+        return None
+
+    @property
+    def color_name(self) -> Optional[str]:
+        """Возвращает цвет из связанного варианта."""
+        if self.variant and self.variant.color:
+            return self.variant.color.color_name
+        return None
+
+    @property
+    def image_url(self) -> Optional[str]:
+        """Возвращает URL изображения варианта."""
+        if self.variant:
+            return self.variant.image_url
+        return None
 ===== backend/app/returns/repositories.py =====
 from app.core.repository import SqlAlchemyRepo
 from app.returns.models import Return, ReturnItem, ReturnStatus
@@ -6427,7 +6476,6 @@ class WishlistRepo(SqlAlchemyRepo):
         self.session.add(new_item)
         await self.session.commit()
 
-        # Жадная загрузка связей для предотвращения MissingGreenlet при сериализации
         stmt = select(self.model).where(self.model.id == new_item.id).options(
             selectinload(self.model.variant).selectinload(ProductVariant.product),
             selectinload(self.model.variant).selectinload(ProductVariant.color),
@@ -6455,10 +6503,10 @@ class WishlistRepo(SqlAlchemyRepo):
         return result.scalars().unique().all()
 
     async def find_item(
-        self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None,
-        variant_id: Optional[int] = None
+            self,
+            user_id: Optional[UUID] = None,
+            session_id: Optional[str] = None,
+            variant_id: Optional[int] = None
     ) -> Wishlist | None:
         stmt = select(self.model).where(self.model.variant_id == variant_id)
         if user_id:
@@ -6469,10 +6517,10 @@ class WishlistRepo(SqlAlchemyRepo):
         return result.scalar_one_or_none()
 
     async def remove_item(
-        self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None,
-        variant_id: Optional[int] = None
+            self,
+            user_id: Optional[UUID] = None,
+            session_id: Optional[str] = None,
+            variant_id: Optional[int] = None
     ):
         stmt = delete(self.model).where(self.model.variant_id == variant_id)
         if user_id:
@@ -6480,7 +6528,26 @@ class WishlistRepo(SqlAlchemyRepo):
         if session_id:
             stmt = stmt.where(self.model.session_id == session_id)
         await self.session.execute(stmt)
-        await self.session.commit()===== backend/app/wishlist/routes.py =====
+        await self.session.commit()
+
+    async def clear_session_wishlist(self, session_id: str):
+        """Удаляет все товары из гостевого избранного при выходе из аккаунта."""
+        stmt = delete(self.model).where(self.model.session_id == session_id)
+        await self.session.execute(stmt)
+        await self.session.commit()
+
+    async def merge_session_wishlist_to_user(self, user_id: UUID, session_id: str):
+        """При регистрации переносим избранное сессии пользователю."""
+        session_items = await self.get_session_wishlist(session_id)
+        for item in session_items:
+            existing = await self.find_item(user_id, None, item.variant_id)
+            if not existing:
+                item.user_id = user_id
+                item.session_id = None
+            else:
+                await self.session.delete(item)
+        await self.session.commit()
+===== backend/app/wishlist/routes.py =====
 from fastapi import APIRouter, Request, Response, Cookie
 from app.wishlist.schemas import WishlistCreate, WishlistRead
 from app.wishlist.dependencies import WishlistServiceDep
@@ -6578,14 +6645,13 @@ from app.wishlist.repositories import WishlistRepo
 from app.wishlist.schemas import WishlistCreate
 from app.wishlist.models import Wishlist
 
-
 class WishlistService:
     def __init__(self, repo: WishlistRepo):
         self.repo = repo
 
     async def add_item(
         self,
-        data: WishlistCreate,  # ← ПЕРВЫЙ аргумент
+        data: WishlistCreate,
         user_id: Optional[UUID] = None,
         session_id: Optional[str] = None
     ) -> Wishlist:
@@ -6596,7 +6662,6 @@ class WishlistService:
         )
         if existing:
             return existing
-
         return await self.repo.add_to_wishlist(
             variant_id=data.variant_id,
             user_id=user_id,
@@ -6622,12 +6687,16 @@ class WishlistService:
     ):
         if not user_id and not session_id:
             raise ValueError("Необходимо указать либо user_id, либо session_id для удаления товара")
-
         await self.repo.remove_item(
             user_id=user_id,
             session_id=session_id,
             variant_id=variant_id
-        )===== backend/app/wishlist/__init__.py =====
+        )
+
+    async def clear_session(self, session_id: str):
+        """Очищает гостевое избранное при выходе из аккаунта."""
+        await self.repo.clear_session_wishlist(session_id)
+===== backend/app/wishlist/__init__.py =====
 ===== backend/app/__init__.py =====
 ===== backend/Dockerfile =====
 FROM python:3.12-slim

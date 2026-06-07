@@ -118,14 +118,6 @@ USERS = [
     },
 ]
 
-WISHLIST_ITEMS = [
-    {"product_slug": "sport-sneakers", "user_email": "user@example.com", "size": "38", "color": "Черный"},
-]
-
-CART_ITEMS = [
-    {"product_slug": "classic-shirt", "user_email": "user@example.com", "quantity": 1, "size": "M", "color": "Белый"},
-]
-
 
 # ---------- Вспомогательные функции ----------
 async def get_category_by_slug(session: AsyncSession, slug: str) -> Optional[Category]:
@@ -258,89 +250,6 @@ async def init_db():
                 await session.flush()
                 user_objects[user_data["email"]] = user
                 logger.info(f"Создан пользователь: {user_data['email']}")
-
-            # --- Wishlist ---
-            for wish_data in WISHLIST_ITEMS:
-                product = await get_product_by_slug(session, wish_data["product_slug"])
-                user = user_objects.get(wish_data["user_email"])
-                if not product or not user:
-                    logger.warning(f"Не удалось добавить в вишлист: товар или пользователь не найдены")
-                    continue
-
-                size = wish_data.get("size", "")
-                color = wish_data.get("color", "")
-
-                # Ищем конкретный вариант через JOIN с размерами и цветами
-                stmt = (
-                    select(ProductVariant)
-                    .join(ProductSize)
-                    .join(ProductColor)
-                    .where(
-                        ProductVariant.product_id == product.id,
-                        ProductSize.size_label == size,
-                        ProductColor.color_name == color
-                    )
-                )
-                result = await session.execute(stmt)
-                variant = result.scalar_one_or_none()
-
-                if not variant:
-                    logger.warning(f"Не найден вариант ({size}, {color}) для wishlist: {product.name}")
-                    continue
-
-                # Проверяем, нет ли уже такой записи
-                stmt = select(Wishlist).where(Wishlist.variant_id == variant.id, Wishlist.user_id == user.id)
-                result = await session.execute(stmt)
-                if not result.scalar_one_or_none():
-                    wish = Wishlist(user_id=user.id, variant_id=variant.id)
-                    session.add(wish)
-                    logger.info(f"Вариант {variant.sku} добавлен в вишлист пользователя {user.email}")
-
-            # --- Корзина ---
-            for cart_data in CART_ITEMS:
-                product = await get_product_by_slug(session, cart_data["product_slug"])
-                user = user_objects.get(cart_data["user_email"])
-                if not product or not user:
-                    logger.warning(f"Не удалось добавить в корзину: товар или пользователь не найдены")
-                    continue
-
-                size = cart_data.get("size", "")
-                color = cart_data.get("color", "")
-
-                # Ищем вариант по размеру и цвету
-                stmt = (
-                    select(ProductVariant)
-                    .join(ProductSize)
-                    .join(ProductColor)
-                    .where(
-                        ProductVariant.product_id == product.id,
-                        ProductSize.size_label == size,
-                        ProductColor.color_name == color
-                    )
-                )
-                result = await session.execute(stmt)
-                variant = result.scalar_one_or_none()
-
-                if not variant:
-                    logger.warning(f"Не найден вариант ({size}, {color}) для корзины: {product.name}")
-                    continue
-
-                # Проверяем существующую запись
-                stmt = select(CartItem).where(CartItem.user_id == user.id, CartItem.variant_id == variant.id)
-                result = await session.execute(stmt)
-                existing_item = result.scalar_one_or_none()
-
-                if existing_item:
-                    existing_item.quantity += cart_data["quantity"]
-                    logger.info(f"Увеличено количество {variant.sku} в корзине")
-                else:
-                    cart_item = CartItem(
-                        user_id=user.id,
-                        variant_id=variant.id,
-                        quantity=cart_data["quantity"],
-                    )
-                    session.add(cart_item)
-                    logger.info(f"Вариант {variant.sku} добавлен в корзину пользователя {user.email}")
 
             logger.info("Заполнение базы данных успешно завершено!")
 
