@@ -53,7 +53,7 @@ async def add_to_wishlist(
 
 @router.delete("/items/{variant_id}", status_code=204)
 async def remove_from_wishlist(
-        variant_id: UUID,
+        variant_id: int,
         request: Request,
         current_user: OptionalUserDep,
         wishlist_svc: WishlistServiceDep,

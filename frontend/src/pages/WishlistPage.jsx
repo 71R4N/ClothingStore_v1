@@ -12,9 +12,9 @@ function WishlistPage() {
   const { addToCart } = useCart();
   const navigate = useNavigate();
 
-  const handleRemove = async (id) => {
+  const handleRemove = async (variantId) => {
     try {
-      await removeFromWishlist(id);
+      await removeFromWishlist(variantId);
       message.success('Товар удален из избранного');
     } catch (e) {
       message.error('Ошибка при удалении');
@@ -96,7 +96,7 @@ function WishlistPage() {
           </Button>
           <Popconfirm 
             title="Удалить из избранного?" 
-            onConfirm={() => handleRemove(record.id)} // Удаляем по ID записи в wishlist
+            onConfirm={() => handleRemove(record.variant_id)} // Удаляем по ID записи в wishlist
             okText="Да"
             cancelText="Нет"
           >

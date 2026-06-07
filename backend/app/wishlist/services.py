@@ -42,7 +42,7 @@ class WishlistService:
 
     async def remove_item(
         self,
-        variant_id: UUID,
+        variant_id: int,
         user_id: Optional[UUID] = None,
         session_id: Optional[str] = None
     ):

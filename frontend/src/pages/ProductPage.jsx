@@ -4,7 +4,7 @@ import { catalogService } from '../services/catalogService';
 import { useCart } from '../hooks/useCart';
 import { useWishlist } from '../hooks/useWishlist';
 import { HeartOutlined, HeartFilled } from '@ant-design/icons';
-import { Typography, Button, Image, Select, Row, Col, Space, Spin, message } from 'antd'; // ✅ Добавлен message
+import { Typography, Button, Image, Select, Row, Col, Space, Spin, message } from 'antd';
 
 const { Title, Text } = Typography;
 
@@ -16,6 +16,22 @@ function ProductPage() {
   const [selectedColorId, setSelectedColorId] = useState(null);
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+
+  const handleWishlistToggle = async () => {
+        if (!selectedVariant) return;
+        try {
+            if (isInWishlist(selectedVariant.id)) {
+                await removeFromWishlist(selectedVariant.id);
+                message.success('Товар удален из избранного');
+            } else {
+                await addToWishlist(selectedVariant.id);
+                message.success('Товар добавлен в избранное');
+            }
+        } catch (e) {
+            console.error(e);
+            message.error(e.response?.data?.detail || 'Ошибка при обновлении избранного');
+        }
+    };
 
   useEffect(() => {
     catalogService.getProductBySlug(slug)
@@ -150,13 +166,7 @@ function ProductPage() {
 
             <Button 
               icon={isInWishlist(selectedVariant?.id) ? <HeartFilled style={{color: '#ff4d4f'}} /> : <HeartOutlined />}
-              onClick={() => {
-                if (isInWishlist(selectedVariant?.id)) {
-                  removeFromWishlist(selectedVariant.id);
-                } else {
-                  addToWishlist(selectedVariant.id);
-                }
-              }}
+              onClick={handleWishlistToggle}
               disabled={!selectedVariant}
               size="large"
             >
