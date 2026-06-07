@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base, CreatedAtCol
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 
 class ReturnStatus(str, enum.Enum):
@@ -31,7 +31,11 @@ class ReturnReasonType(str, enum.Enum):
 
 
 class Return(Base):
-    """Модель заявки на возврат товаров."""
+    """
+    Модель заявки на возврат одного товара из заказа.
+    Каждая запись представляет собой независимую заявку,
+    что позволяет администратору принимать решения по каждому товару отдельно.
+    """
     __tablename__ = "returns"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -40,6 +44,11 @@ class Return(Base):
     order_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    order_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("order_items.id", ondelete="CASCADE"),
         nullable=False, index=True
     )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -59,9 +68,12 @@ class Return(Base):
         nullable=False
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    total_amount: Mapped[float] = mapped_column(
+
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    refund_amount: Mapped[float] = mapped_column(
         Numeric(10, 2, asdecimal=False), nullable=False
     )
+    photos: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     refund_payment_id: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, index=True
     )
@@ -83,10 +95,8 @@ class Return(Base):
 
     # Связи
     order: Mapped["Order"] = relationship("Order", back_populates="returns")
-    items: Mapped[List["ReturnItem"]] = relationship(
-        "ReturnItem",
-        back_populates="return_request",
-        cascade="all, delete-orphan"
+    order_item: Mapped["OrderItem"] = relationship(
+        "OrderItem", back_populates="returns"
     )
     resolver: Mapped[Optional["User"]] = relationship(
         "User", foreign_keys=[resolved_by]
@@ -94,11 +104,48 @@ class Return(Base):
 
     __table_args__ = (
         Index("ix_returns_order_status", "order_id", "status"),
+        Index("ix_returns_order_item_status", "order_item_id", "status"),
     )
+
+    @property
+    def total_amount(self) -> float:
+        """Совместимость: возвращает refund_amount."""
+        return self.refund_amount
+
+    @property
+    def product_name(self) -> Optional[str]:
+        """Вычисляемое свойство: наименование товара из связанного варианта."""
+        if self.order_item and self.order_item.variant and self.order_item.variant.product:
+            return self.order_item.variant.product.name
+        return None
+
+    @property
+    def size_label(self) -> Optional[str]:
+        """Вычисляемое свойство: размер товара."""
+        if self.order_item and self.order_item.variant and self.order_item.variant.size:
+            return self.order_item.variant.size.size_label
+        return None
+
+    @property
+    def color_name(self) -> Optional[str]:
+        """Вычисляемое свойство: цвет товара."""
+        if self.order_item and self.order_item.variant and self.order_item.variant.color:
+            return self.order_item.variant.color.color_name
+        return None
+
+    @property
+    def image_url(self) -> Optional[str]:
+        """Вычисляемое свойство: URL изображения варианта товара."""
+        if self.order_item and self.order_item.variant:
+            return self.order_item.variant.image_url
+        return None
 
 
 class ReturnItem(Base):
-    """Модель позиции возврата (конкретный товар из заказа)."""
+    """
+    Устаревшая модель позиции возврата.
+    Сохранена для обратной совместимости, но более не используется в новой логике.
+    """
     __tablename__ = "return_items"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -126,10 +173,7 @@ class ReturnItem(Base):
     photos: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[CreatedAtCol]
 
-    # Связи
-    return_request: Mapped["Return"] = relationship(
-        "Return", back_populates="items"
-    )
+    # Связи (устаревшие, не используются в новой логике)
     order_item: Mapped["OrderItem"] = relationship(
         "OrderItem", back_populates="return_items"
     )
@@ -139,28 +183,24 @@ class ReturnItem(Base):
 
     @property
     def product_name(self) -> Optional[str]:
-        """Возвращает название товара из связанного варианта."""
         if self.variant and self.variant.product:
             return self.variant.product.name
         return None
 
     @property
     def size_label(self) -> Optional[str]:
-        """Возвращает размер из связанного варианта."""
         if self.variant and self.variant.size:
             return self.variant.size.size_label
         return None
 
     @property
     def color_name(self) -> Optional[str]:
-        """Возвращает цвет из связанного варианта."""
         if self.variant and self.variant.color:
             return self.variant.color.color_name
         return None
 
     @property
     def image_url(self) -> Optional[str]:
-        """Возвращает URL изображения варианта."""
         if self.variant:
             return self.variant.image_url
         return None

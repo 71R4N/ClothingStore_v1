@@ -1,3 +1,4 @@
+# backend/worker/tasks/returns.py
 import asyncio
 import logging
 from uuid import UUID
@@ -8,7 +9,6 @@ from app.returns.services import ReturnService
 from app.returns.models import ReturnStatus
 from app.orders.repositories import OrderRepo, OrderItemRepo
 from app.catalog.repositories import ProductVariantRepo
-from app.returns.repositories import ReturnItemRepo
 from app.payments.client import yookassa_client, YooKassaAPIError
 from app.payments.repositories import PaymentRepo
 
@@ -19,7 +19,6 @@ async def _process_refund_async(return_id: UUID, amount: float):
     """Асинхронная логика возврата средств."""
     async with AsyncSessionLocal() as session:
         return_repo = ReturnRepo(session)
-        return_item_repo = ReturnItemRepo(session)
         order_repo = OrderRepo(session)
         order_item_repo = OrderItemRepo(session)
         variant_repo = ProductVariantRepo(session)
@@ -27,20 +26,20 @@ async def _process_refund_async(return_id: UUID, amount: float):
 
         service = ReturnService(
             return_repo=return_repo,
-            return_item_repo=return_item_repo,
             order_repo=order_repo,
             order_item_repo=order_item_repo,
             variant_repo=variant_repo,
         )
 
-        return_obj = await return_repo.get_with_items(return_id)
+        return_obj = await return_repo.get_with_item_details(return_id)
         if not return_obj:
             logger.error(f"Return {return_id} not found for refund")
             return
 
         if return_obj.status != ReturnStatus.APPROVED:
             logger.warning(
-                f"Return {return_id} is not approved (status: {return_obj.status})"
+                f"Return {return_id} is not approved "
+                f"(status: {return_obj.status})"
             )
             return
 
@@ -59,7 +58,6 @@ async def _process_refund_async(return_id: UUID, amount: float):
                 amount=amount,
                 description=f"Refund for return {str(return_id)[:8]}"
             )
-
             yookassa_refund_id = refund_result.get("id")
             refund_status = refund_result.get("status")
 
@@ -70,7 +68,6 @@ async def _process_refund_async(return_id: UUID, amount: float):
                     f"{yookassa_refund_id}"
                 )
             else:
-                # Refund pending — обновим по webhook или при следующем polling
                 return_obj.refund_payment_id = yookassa_refund_id
                 await session.commit()
                 logger.info(
@@ -87,14 +84,12 @@ async def _mark_refund_failed(return_id: UUID, error: str):
     """Отмечает возврат как failed при превышении retry."""
     async with AsyncSessionLocal() as session:
         return_repo = ReturnRepo(session)
-        return_item_repo = ReturnItemRepo(session)
         order_repo = OrderRepo(session)
         order_item_repo = OrderItemRepo(session)
         variant_repo = ProductVariantRepo(session)
 
         service = ReturnService(
             return_repo=return_repo,
-            return_item_repo=return_item_repo,
             order_repo=order_repo,
             order_item_repo=order_item_repo,
             variant_repo=variant_repo,
@@ -121,7 +116,8 @@ def process_refund_task(self, return_id: str, amount: float):
         asyncio.run(_process_refund_async(UUID(return_id), amount))
     except Exception as e:
         logger.error(
-            f"Refund task failed for return {return_id}: {type(e).__name__}: {e}"
+            f"Refund task failed for return {return_id}: "
+            f"{type(e).__name__}: {e}"
         )
         try:
             self.retry(exc=e)

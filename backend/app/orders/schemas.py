@@ -14,6 +14,7 @@ class OrderItemBase(BaseModel):
 class OrderItemRead(OrderItemBase):
     id: UUID
     variant: Optional[ProductVariantRead] = None
+    return_status: Optional[str] = None
     model_config = {"from_attributes": True}
 
 

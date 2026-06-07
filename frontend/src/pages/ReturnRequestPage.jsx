@@ -7,7 +7,7 @@ import { returnService } from '../services/returnService';
 import { uploadService } from '../services/uploadService';
 import {
     Typography, Button, Card, Checkbox, InputNumber, Select,
-    Input, Upload, message, Spin, Alert, Space, Image, Divider
+    Input, Upload, message, Spin, Alert, Space, Image, Divider, Progress
 } from 'antd';
 import {
     ArrowLeftOutlined, UploadOutlined, RotateLeftOutlined
@@ -15,7 +15,6 @@ import {
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
-const { Dragger } = Upload;
 
 const RETURN_REASONS = [
     { value: 'defective', label: 'Брак / дефект товара' },
@@ -28,11 +27,10 @@ const RETURN_REASONS = [
 function ReturnRequestPage() {
     const { orderId } = useParams();
     const navigate = useNavigate();
-
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-
+    const [progress, setProgress] = useState(0);
     const [selectedItems, setSelectedItems] = useState({});
     const [reason, setReason] = useState(null);
     const [description, setDescription] = useState('');
@@ -107,26 +105,50 @@ function ReturnRequestPage() {
         }
 
         setSubmitting(true);
-        try {
-            const items = Object.entries(selectedItems).map(([id, data]) => ({
-                order_item_id: id,
-                quantity: data.quantity,
-                photos: photos[id] || []
-            }));
+        setProgress(0);
 
-            await returnService.createReturn({
-                order_id: orderId,
-                reason_type: reason,
-                description: description || null,
-                items
-            });
+        const itemsList = Object.entries(selectedItems);
+        const totalItems = itemsList.length;
+        let successCount = 0;
+        let errorCount = 0;
 
-            message.success('Заявка на возврат создана');
+        // Создаём отдельную заявку для каждого товара
+        for (let i = 0; i < itemsList.length; i++) {
+            const [orderItemId, data] = itemsList[i];
+
+            try {
+                await returnService.createReturn({
+                    order_id: orderId,
+                    order_item_id: orderItemId,
+                    quantity: data.quantity,
+                    reason_type: reason,
+                    description: description || null,
+                    photos: photos[orderItemId] || []
+                });
+                successCount++;
+            } catch (e) {
+                errorCount++;
+                const itemName = order.items.find(
+                    item => item.id === orderItemId
+                )?.variant?.product?.name || 'товар';
+                message.error(
+                    `Ошибка возврата "${itemName}": ${e.response?.data?.detail || 'Неизвестная ошибка'}`
+                );
+            }
+
+            // Обновляем прогресс
+            setProgress(Math.round(((i + 1) / totalItems) * 100));
+        }
+
+        setSubmitting(false);
+
+        if (successCount > 0) {
+            message.success(
+                `Создано заявок: ${successCount} из ${totalItems}`
+            );
             navigate('/returns');
-        } catch (e) {
-            message.error(e.response?.data?.detail || 'Ошибка создания возврата');
-        } finally {
-            setSubmitting(false);
+        } else {
+            message.error('Не удалось создать ни одной заявки');
         }
     };
 
@@ -149,19 +171,17 @@ function ReturnRequestPage() {
             >
                 Назад к заказу
             </Button>
-
             <Title level={2}>
                 <RotateLeftOutlined style={{ marginRight: 12 }} />
                 Возврат товаров
             </Title>
-
             <Alert
-                message="Возврат возможен в течение 14 дней с момента доставки"
+                message="Каждый товар оформляется как отдельная заявка на возврат"
+                description="Это позволяет администратору принимать решения по каждому товару независимо."
                 type="info"
                 showIcon
                 style={{ marginBottom: 24 }}
             />
-
             <Card title="Выберите товары для возврата" style={{ marginBottom: 24 }}>
                 {order.items.map(item => {
                     const isSelected = !!selectedItems[item.id];
@@ -201,7 +221,6 @@ function ReturnRequestPage() {
                                     </div>
                                 </Space>
                             </Checkbox>
-
                             {isSelected && (
                                 <div style={{ marginTop: 16, marginLeft: 32 }}>
                                     <Space>
@@ -213,7 +232,6 @@ function ReturnRequestPage() {
                                             onChange={(v) => updateQuantity(item.id, v)}
                                         />
                                     </Space>
-
                                     {reason === 'defective' && (
                                         <div style={{ marginTop: 12 }}>
                                             <Text>Фото дефекта (опционально):</Text>
@@ -247,7 +265,6 @@ function ReturnRequestPage() {
                     );
                 })}
             </Card>
-
             <Card title="Причина возврата" style={{ marginBottom: 24 }}>
                 <Select
                     placeholder="Выберите причину"
@@ -257,7 +274,6 @@ function ReturnRequestPage() {
                     options={RETURN_REASONS}
                     size="large"
                 />
-
                 <div style={{ marginTop: 16 }}>
                     <Text strong>Комментарий (опционально):</Text>
                     <TextArea
@@ -271,16 +287,23 @@ function ReturnRequestPage() {
                     />
                 </div>
             </Card>
-
             <Card style={{ marginBottom: 24, background: '#f5f5f5' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text strong style={{ fontSize: 16 }}>Сумма к возврату:</Text>
+                    <Text strong style={{ fontSize: 16 }}>
+                        Заявок к созданию: {Object.keys(selectedItems).length}
+                    </Text>
                     <Text strong style={{ fontSize: 24, color: '#1890ff' }}>
                         {calculateTotal().toFixed(2)} ₽
                     </Text>
                 </div>
+                {submitting && (
+                    <Progress
+                        percent={progress}
+                        status="active"
+                        style={{ marginTop: 16 }}
+                    />
+                )}
             </Card>
-
             <Button
                 type="primary"
                 size="large"
@@ -289,7 +312,10 @@ function ReturnRequestPage() {
                 onClick={handleSubmit}
                 disabled={!reason || Object.keys(selectedItems).length === 0}
             >
-                Отправить заявку на возврат
+                {submitting
+                    ? `Создание заявок... ${Object.keys(selectedItems).length} шт.`
+                    : `Создать ${Object.keys(selectedItems).length} заявок на возврат`
+                }
             </Button>
         </div>
     );

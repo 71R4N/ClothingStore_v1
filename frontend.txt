@@ -4943,9 +4943,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { orderService } from '../services/orderService';
 import { Descriptions, List, Typography, Spin, Image, Tag, Button, Alert, Space, Divider } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, RotateLeftOutlined } from '@ant-design/icons';
 import { message } from 'antd';
-import { RotateLeftOutlined } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 
@@ -4955,6 +4954,15 @@ function OrderDetailPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const navigate = useNavigate();
+
+    const returnStatusConfig = {
+        pending: { text: 'Оформляется возврат', color: 'gold', textColor: '#000' },
+        approved: { text: 'Оформлен возврат', color: 'blue', textColor: '#000' },
+        refunded: { text: 'Оформлен возврат', color: 'blue', textColor: '#000' },
+        rejected: { text: 'Товар возврату не подлежит', color: 'red', textColor: '#000' },
+        failed: { text: 'Ошибка возврата', color: 'volcano' },
+        cancelled: { text: 'Возврат отменен', color: 'default' },
+    };
 
     useEffect(() => {
         const fetchOrder = async () => {
@@ -4968,12 +4976,10 @@ function OrderDetailPage() {
                 const errorMsg = err.response?.data?.detail || 'Не удалось загрузить информацию о заказе';
                 setError(errorMsg);
                 message.error(errorMsg);
-                // Не делаем автоматический редирект, даем пользователю увидеть ошибку
             } finally {
                 setLoading(false);
             }
         };
-
         if (id) {
             fetchOrder();
         }
@@ -5051,11 +5057,9 @@ function OrderDetailPage() {
             >
                 Назад к списку заказов
             </Button>
-
             <Title level={2}>
                 Заказ #{order.id.substring(0, 8)}
             </Title>
-
             <Descriptions
                 column={{ xs: 1, sm: 2 }}
                 bordered
@@ -5083,13 +5087,10 @@ function OrderDetailPage() {
                     </Text>
                 </Descriptions.Item>
             </Descriptions>
-
             <Divider />
-
             <Title level={4} style={{ marginBottom: 16 }}>
                 Состав заказа ({order.items.length} {order.items.length === 1 ? 'товар' : 'товаров'})
             </Title>
-
             <List
                 itemLayout="horizontal"
                 dataSource={order.items}
@@ -5099,63 +5100,76 @@ function OrderDetailPage() {
                     const color = variant.color || {};
                     const size = variant.size || {};
 
+                    const returnCfg = item.return_status ? returnStatusConfig[item.return_status] : null;
+                    const isReturned = ['approved', 'refunded'].includes(item.return_status);
+
                     return (
-                        <List.Item style={{ padding: '16px 0' }}>
-                            <List.Item.Meta
-                                avatar={
-                                    <Image
-                                        src={variant.image_url || 'https://via.placeholder.com/100x120?text=No+Image'}
-                                        width={100}
-                                        height={120}
-                                        style={{ objectFit: 'cover', borderRadius: 8 }}
-                                        preview={false}
-                                        fallback="https://via.placeholder.com/100x120?text=No+Image"
-                                    />
-                                }
-                                title={
-                                    <Space direction="vertical" size={0}>
-                                        <Text strong style={{ fontSize: 16 }}>
-                                            {product.name || `Товар #${item.variant_id}`}
-                                        </Text>
+                        <List.Item
+                            style={{
+                                padding: '16px',
+                                background: isReturned ? '#fff' : '#fff',
+                                borderRadius: 8,
+                                marginBottom: 12,
+                                border: isReturned ? '1px solid #ffe58f' : '1px solid #f0f0f0',
+                                display: 'block'
+                            }}
+                        >
+                            <div style={{ display: 'flex', gap: 16 }}>
+                                <Image
+                                    src={variant.image_url || 'https://via.placeholder.com/100x120?text=No+Image'}
+                                    width={100}
+                                    height={120}
+                                    style={{ objectFit: 'cover', borderRadius: 8 }}
+                                    preview={false}
+                                    fallback="https://via.placeholder.com/100x120?text=No+Image"
+                                />
+                                <div style={{ flex: 1 }}>
+                                    <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                        <Space wrap>
+                                            <Text strong style={{ fontSize: 16 }}>
+                                                {product.name || `Товар #${item.variant_id}`}
+                                            </Text>
+                                            {returnCfg && (
+                                                <Tag
+                                                    color={returnCfg.color}
+                                                    style={{ color: returnCfg.textColor || '#fff', fontWeight: 500 }}
+                                                >
+                                                    {returnCfg.text}
+                                                </Tag>
+                                            )}
+                                        </Space>
                                         <Text type="secondary" style={{ fontSize: 13 }}>
                                             Артикул: {variant.sku || 'N/A'}
                                         </Text>
-                                    </Space>
-                                }
-                                description={
-                                    <Space direction="vertical" size={4} style={{ marginTop: 8 }}>
-                                        {color.color_name && (
-                                            <Space size={4}>
-                                                <div
-                                                    style={{
-                                                        width: 16,
-                                                        height: 16,
+                                        <Space direction="vertical" size={2} style={{ marginTop: 4 }}>
+                                            {color.color_name && (
+                                                <Space size={4}>
+                                                    <div style={{
+                                                        width: 14, height: 14,
                                                         backgroundColor: color.color_hex,
                                                         borderRadius: '50%',
                                                         border: '1px solid #d9d9d9'
-                                                    }}
-                                                />
-                                                <Text>Цвет: {color.color_name}</Text>
-                                            </Space>
-                                        )}
-                                        {size.size_label && (
-                                            <Text>Размер: {size.size_label}</Text>
-                                        )}
-                                        <Text>Количество: {item.quantity} шт.</Text>
+                                                    }} />
+                                                    <Text style={{ fontSize: 13 }}>Цвет: {color.color_name}</Text>
+                                                </Space>
+                                            )}
+                                            {size.size_label && (
+                                                <Text style={{ fontSize: 13 }}>Размер: {size.size_label}</Text>
+                                            )}
+                                            <Text style={{ fontSize: 13 }}>Количество: {item.quantity} шт.</Text>
+                                        </Space>
                                     </Space>
-                                }
-                            />
-                            <div style={{ textAlign: 'right', minWidth: 120 }}>
-                                <div style={{ fontSize: 18, fontWeight: 600, color: '#1890ff' }}>
-                                    {Number(item.price_at_purchase).toFixed(2)} ₽
                                 </div>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    за единицу
-                                </Text>
-                                <div style={{ marginTop: 4 }}>
-                                    <Text strong>
-                                        Итого: {(Number(item.price_at_purchase) * item.quantity).toFixed(2)} ₽
-                                    </Text>
+                                <div style={{ textAlign: 'right', minWidth: 120 }}>
+                                    <div style={{ fontSize: 18, fontWeight: 600, color: '#1890ff' }}>
+                                        {Number(item.price_at_purchase).toFixed(2)} ₽
+                                    </div>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>за единицу</Text>
+                                    <div style={{ marginTop: 4 }}>
+                                        <Text strong>
+                                            Итого: {(Number(item.price_at_purchase) * item.quantity).toFixed(2)} ₽
+                                        </Text>
+                                    </div>
                                 </div>
                             </div>
                         </List.Item>
@@ -5165,7 +5179,21 @@ function OrderDetailPage() {
             {order.status === 'delivered' && (() => {
                 const deliveryDate = new Date(order.updated_at || order.created_at);
                 const daysSinceDelivery = (new Date() - deliveryDate) / (1000 * 60 * 60 * 24);
-                const canReturn = daysSinceDelivery <= 14 && !order.has_returns;
+                const allItemsReturned = order.items.every(item =>
+                    ['pending', 'approved', 'refunded', 'rejected'].includes(item.return_status)
+                );
+                const canReturn = daysSinceDelivery <= 14 && !allItemsReturned;
+
+                let buttonText = 'Вернуть товары';
+                let tooltip = `Возврат возможен в течение 14 дней с момента доставки (осталось ${Math.max(0, Math.ceil(14 - daysSinceDelivery))} дн.)`;
+
+                if (allItemsReturned) {
+                    buttonText = 'Все товары в заявках на возврат';
+                    tooltip = 'Для всех товаров в этом заказе уже существуют заявки на возврат';
+                } else if (daysSinceDelivery > 14) {
+                    buttonText = 'Срок возврата истёк';
+                    tooltip = 'Срок возврата (14 дней) истёк';
+                }
 
                 return (
                     <div style={{ marginTop: 24 }}>
@@ -5177,23 +5205,17 @@ function OrderDetailPage() {
                             disabled={!canReturn}
                             block
                         >
-                            {order.has_returns ? 'Возврат уже оформлен' : 'Вернуть товары'}
+                            {buttonText}
                         </Button>
                         <Text type="secondary" style={{
                             display: 'block', textAlign: 'center',
                             marginTop: 8, fontSize: 12
                         }}>
-                            {canReturn
-                                ? `Возврат возможен в течение 14 дней с момента доставки (осталось ${Math.max(0, Math.ceil(14 - daysSinceDelivery))} дн.)`
-                                : daysSinceDelivery > 14
-                                    ? 'Срок возврата (14 дней) истёк'
-                                    : 'Возврат уже оформлен для этого заказа'
-                            }
+                            {tooltip}
                         </Text>
                     </div>
                 );
             })()}
-
             {order.status === 'pending' && (
                 <Alert
                     message="Заказ ожидает оплаты"
@@ -6298,179 +6320,190 @@ function RegisterPage() {
 
 export default RegisterPage;===== frontend/src/pages/ReturnDetailPage.jsx =====
 // frontend/src/pages/ReturnDetailPage.jsx
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { returnService } from '../services/returnService';
 import {
-    Typography, Card, Descriptions, Tag, Button, Steps,
-    Image, List, Spin, Alert, Space, Divider
+  Typography, Card, Descriptions, Tag, Button, Steps,
+  Image, List, Spin, Alert, Space, Divider
 } from 'antd';
 import {
-    ArrowLeftOutlined, CheckCircleOutlined,
-    CloseCircleOutlined, ClockCircleOutlined, LoadingOutlined
+  ArrowLeftOutlined, CheckCircleOutlined,
+  CloseCircleOutlined, ClockCircleOutlined, LoadingOutlined
 } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 
 const REASON_LABELS = {
-    defective: 'Брак / дефект',
-    wrong_size: 'Не подошёл размер',
-    wrong_color: 'Не тот цвет',
-    changed_mind: 'Передумал(а)',
-    other: 'Другая причина',
+  defective: 'Брак / дефект',
+  wrong_size: 'Не подошёл размер',
+  wrong_color: 'Не тот цвет',
+  changed_mind: 'Передумал(а)',
+  other: 'Другая причина',
 };
 
 function ReturnDetailPage() {
-    const { returnId } = useParams();
-    const navigate = useNavigate();
-    const [ret, setRet] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const { returnId } = useParams();
+  const navigate = useNavigate();
+  const [ret, setRet] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const res = await returnService.getReturn(returnId);
-                setRet(res.data);
-            } catch (e) {
-                navigate('/returns');
-            } finally {
-                setLoading(false);
-            }
-        };
-        if (returnId) load();
-    }, [returnId, navigate]);
-
-    const getStepsStatus = (status) => {
-        switch (status) {
-            case 'pending':  return 0;
-            case 'approved': return 1;
-            case 'refunded': return 2;
-            case 'rejected':
-            case 'cancelled':
-            case 'failed':   return 2;
-            default:         return 0;
-        }
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await returnService.getReturn(returnId);
+        setRet(res.data);
+      } catch (e) {
+        navigate('/returns');
+      } finally {
+        setLoading(false);
+      }
     };
+    if (returnId) load();
+  }, [returnId, navigate]);
 
-    const getStepStatus = (status) => {
-        if (['rejected', 'cancelled', 'failed'].includes(status)) return 'error';
-        if (status === 'refunded') return 'finish';
-        return 'process';
-    };
-
-    if (loading) {
-        return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" /></div>;
+  const getStepsStatus = (status) => {
+    switch (status) {
+      case 'pending':  return 0;
+      case 'approved': return 1;
+      case 'refunded': return 2;
+      case 'rejected':
+      case 'cancelled':
+      case 'failed':   return 2;
+      default:         return 0;
     }
+  };
 
-    if (!ret) return null;
+  const getStepStatus = (status) => {
+    if (['rejected', 'cancelled', 'failed'].includes(status)) return 'error';
+    if (status === 'refunded') return 'finish';
+    return 'process';
+  };
 
-    return (
-        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-            <Button
-                icon={<ArrowLeftOutlined />}
-                onClick={() => navigate('/returns')}
-                style={{ marginBottom: 24 }}
-            >
-                Назад к возвратам
-            </Button>
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" /></div>;
+  }
 
-            <Title level={2}>
-                Заявка на возврат #{ret.id.substring(0, 8)}
-            </Title>
+  if (!ret) return null;
 
-            <Steps
-                current={getStepsStatus(ret.status)}
-                status={getStepStatus(ret.status)}
-                style={{ marginBottom: 32 }}
-                items={[
-                    {
-                        title: 'Заявка создана',
-                        description: new Date(ret.created_at).toLocaleDateString('ru-RU'),
-                        icon: <CheckCircleOutlined />
-                    },
-                    {
-                        title: 'На рассмотрении',
-                        icon: <ClockCircleOutlined />
-                    },
-                    {
-                        title: ret.status === 'refunded' ? 'Средства возвращены'
-                            : ret.status === 'rejected' ? 'Отклонено'
-                            : ret.status === 'cancelled' ? 'Отменено'
-                            : 'Завершено',
-                        icon: ret.status === 'refunded' ? <CheckCircleOutlined />
-                            : ['rejected', 'cancelled', 'failed'].includes(ret.status)
-                                ? <CloseCircleOutlined />
-                                : <LoadingOutlined />
-                    }
-                ]}
-            />
+  return (
+    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+      <Button
+        icon={<ArrowLeftOutlined />}
+        onClick={() => navigate('/returns')}
+        style={{ marginBottom: 24 }}
+      >
+        Назад к возвратам
+      </Button>
+      <Title level={2}>
+        Заявка на возврат #{ret.id.substring(0, 8)}
+      </Title>
 
-            <Card style={{ marginBottom: 24 }}>
-                <Descriptions column={{ xs: 1, sm: 2 }} bordered>
-                    <Descriptions.Item label="Статус">
-                        <Tag color={
-                            ret.status === 'pending' ? 'blue' :
-                            ret.status === 'approved' ? 'green' :
-                            ret.status === 'refunded' ? 'cyan' :
-                            ret.status === 'rejected' ? 'red' : 'default'
-                        }>
-                            {ret.status}
-                        </Tag>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Причина">
-                        {REASON_LABELS[ret.reason_type] || ret.reason_type}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Сумма возврата" span={2}>
-                        <Text strong style={{ fontSize: 20, color: '#1890ff' }}>
-                            {Number(ret.total_amount).toFixed(2)} ₽
-                        </Text>
-                    </Descriptions.Item>
-                    {ret.description && (
-                        <Descriptions.Item label="Комментарий" span={2}>
-                            {ret.description}
-                        </Descriptions.Item>
-                    )}
-                    {ret.rejection_reason && (
-                        <Descriptions.Item label="Причина отклонения" span={2}>
-                            <Text type="danger">{ret.rejection_reason}</Text>
-                        </Descriptions.Item>
-                    )}
-                </Descriptions>
-            </Card>
+      <Steps
+        current={getStepsStatus(ret.status)}
+        status={getStepStatus(ret.status)}
+        style={{ marginBottom: 32 }}
+        items={[
+          {
+            title: 'Заявка создана',
+            description: new Date(ret.created_at).toLocaleDateString('ru-RU'),
+            icon: <CheckCircleOutlined />
+          },
+          {
+            title: 'На рассмотрении',
+            icon: <ClockCircleOutlined />
+          },
+          {
+            title: ret.status === 'refunded' ? 'Средства возвращены'
+                 : ret.status === 'rejected' ? 'Отклонено'
+                 : ret.status === 'cancelled' ? 'Отменено'
+                 : 'Завершено',
+            icon: ret.status === 'refunded' ? <CheckCircleOutlined />
+                : ['rejected', 'cancelled', 'failed'].includes(ret.status)
+                  ? <CloseCircleOutlined />
+                  : <LoadingOutlined />
+          }
+        ]}
+      />
 
-            <Divider />
-            <Title level={4}>Товары ({ret.items.length})</Title>
+      <Card style={{ marginBottom: 24 }}>
+        <Descriptions column={{ xs: 1, sm: 2 }} bordered>
+          <Descriptions.Item label="Статус">
+            <Tag color={
+              ret.status === 'pending' ? 'blue' :
+              ret.status === 'approved' ? 'green' :
+              ret.status === 'refunded' ? 'cyan' :
+              ret.status === 'rejected' ? 'red' : 'default'
+            }>
+              {ret.status}
+            </Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="Причина">
+            {REASON_LABELS[ret.reason_type] || ret.reason_type}
+          </Descriptions.Item>
+          <Descriptions.Item label="Сумма возврата" span={2}>
+            <Text strong style={{ fontSize: 20, color: '#1890ff' }}>
+              {/* ИСПРАВЛЕНО: заменено с ret.total_amount на ret.refund_amount */}
+              {Number(ret.refund_amount).toFixed(2)} ₽
+            </Text>
+          </Descriptions.Item>
+          {ret.description && (
+            <Descriptions.Item label="Комментарий" span={2}>
+              {ret.description}
+            </Descriptions.Item>
+          )}
+          {ret.rejection_reason && (
+            <Descriptions.Item label="Причина отклонения" span={2}>
+              <Text type="danger">{ret.rejection_reason}</Text>
+            </Descriptions.Item>
+          )}
+        </Descriptions>
+      </Card>
 
-            <List
-                dataSource={ret.items}
-                renderItem={item => (
-                    <List.Item>
-                        <List.Item.Meta
-                            avatar={
-                                <Image
-                                    src={item.image_url || 'https://via.placeholder.com/80'}
-                                    width={80} height={100}
-                                    style={{ objectFit: 'cover' }}
-                                    preview={false}
-                                />
-                            }
-                            title={item.product_name || `Вариант #${item.variant_id}`}
-                            description={
-                                <Space direction="vertical" size={0}>
-                                    <Text>{item.color_name} • {item.size_label}</Text>
-                                    <Text>Количество: {item.quantity} шт.</Text>
-                                </Space>
-                            }
-                        />
-                        <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
-                            {Number(item.refund_amount).toFixed(2)} ₽
-                        </Text>
-                    </List.Item>
-                )}
-            />
-        </div>
-    );
+      <Divider />
+
+      <Title level={4}>Товары ({ret.items ? ret.items.length : 1})</Title>
+      {/* В новой логике возврат создается на один конкретный товар (OrderItem),
+          поэтому ret.items может отсутствовать, а данные берутся из самого ret */}
+      <List
+        dataSource={ret.items || [ret]}
+        renderItem={item => {
+          // Адаптация под структуру, где товар может быть вложенным или плоским
+          const itemName = item.product_name || 'Товар по заявке';
+          const colorName = item.color_name || '';
+          const sizeLabel = item.size_label || '';
+          const qty = item.quantity || ret.quantity;
+          const amount = item.refund_amount || ret.refund_amount;
+          const imgUrl = item.image_url || 'https://via.placeholder.com/80';
+
+          return (
+            <List.Item>
+              <List.Item.Meta
+                avatar={
+                  <Image
+                    src={imgUrl}
+                    width={80} height={100}
+                    style={{ objectFit: 'cover' }}
+                    preview={false}
+                  />
+                }
+                title={itemName}
+                description={
+                  <Space direction="vertical" size={0}>
+                    {(colorName || sizeLabel) && <Text>{colorName} {colorName && sizeLabel ? '•' : ''} {sizeLabel}</Text>}
+                    <Text>Количество: {qty} шт.</Text>
+                  </Space>
+                }
+              />
+              <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
+                {Number(amount).toFixed(2)} ₽
+              </Text>
+            </List.Item>
+          );
+        }}
+      />
+    </div>
+  );
 }
 
 export default ReturnDetailPage;===== frontend/src/pages/ReturnRequestPage.jsx =====
@@ -6483,7 +6516,7 @@ import { returnService } from '../services/returnService';
 import { uploadService } from '../services/uploadService';
 import {
     Typography, Button, Card, Checkbox, InputNumber, Select,
-    Input, Upload, message, Spin, Alert, Space, Image, Divider
+    Input, Upload, message, Spin, Alert, Space, Image, Divider, Progress
 } from 'antd';
 import {
     ArrowLeftOutlined, UploadOutlined, RotateLeftOutlined
@@ -6491,7 +6524,6 @@ import {
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
-const { Dragger } = Upload;
 
 const RETURN_REASONS = [
     { value: 'defective', label: 'Брак / дефект товара' },
@@ -6504,11 +6536,10 @@ const RETURN_REASONS = [
 function ReturnRequestPage() {
     const { orderId } = useParams();
     const navigate = useNavigate();
-
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-
+    const [progress, setProgress] = useState(0);
     const [selectedItems, setSelectedItems] = useState({});
     const [reason, setReason] = useState(null);
     const [description, setDescription] = useState('');
@@ -6583,26 +6614,50 @@ function ReturnRequestPage() {
         }
 
         setSubmitting(true);
-        try {
-            const items = Object.entries(selectedItems).map(([id, data]) => ({
-                order_item_id: id,
-                quantity: data.quantity,
-                photos: photos[id] || []
-            }));
+        setProgress(0);
 
-            await returnService.createReturn({
-                order_id: orderId,
-                reason_type: reason,
-                description: description || null,
-                items
-            });
+        const itemsList = Object.entries(selectedItems);
+        const totalItems = itemsList.length;
+        let successCount = 0;
+        let errorCount = 0;
 
-            message.success('Заявка на возврат создана');
+        // Создаём отдельную заявку для каждого товара
+        for (let i = 0; i < itemsList.length; i++) {
+            const [orderItemId, data] = itemsList[i];
+
+            try {
+                await returnService.createReturn({
+                    order_id: orderId,
+                    order_item_id: orderItemId,
+                    quantity: data.quantity,
+                    reason_type: reason,
+                    description: description || null,
+                    photos: photos[orderItemId] || []
+                });
+                successCount++;
+            } catch (e) {
+                errorCount++;
+                const itemName = order.items.find(
+                    item => item.id === orderItemId
+                )?.variant?.product?.name || 'товар';
+                message.error(
+                    `Ошибка возврата "${itemName}": ${e.response?.data?.detail || 'Неизвестная ошибка'}`
+                );
+            }
+
+            // Обновляем прогресс
+            setProgress(Math.round(((i + 1) / totalItems) * 100));
+        }
+
+        setSubmitting(false);
+
+        if (successCount > 0) {
+            message.success(
+                `Создано заявок: ${successCount} из ${totalItems}`
+            );
             navigate('/returns');
-        } catch (e) {
-            message.error(e.response?.data?.detail || 'Ошибка создания возврата');
-        } finally {
-            setSubmitting(false);
+        } else {
+            message.error('Не удалось создать ни одной заявки');
         }
     };
 
@@ -6625,19 +6680,17 @@ function ReturnRequestPage() {
             >
                 Назад к заказу
             </Button>
-
             <Title level={2}>
                 <RotateLeftOutlined style={{ marginRight: 12 }} />
                 Возврат товаров
             </Title>
-
             <Alert
-                message="Возврат возможен в течение 14 дней с момента доставки"
+                message="Каждый товар оформляется как отдельная заявка на возврат"
+                description="Это позволяет администратору принимать решения по каждому товару независимо."
                 type="info"
                 showIcon
                 style={{ marginBottom: 24 }}
             />
-
             <Card title="Выберите товары для возврата" style={{ marginBottom: 24 }}>
                 {order.items.map(item => {
                     const isSelected = !!selectedItems[item.id];
@@ -6677,7 +6730,6 @@ function ReturnRequestPage() {
                                     </div>
                                 </Space>
                             </Checkbox>
-
                             {isSelected && (
                                 <div style={{ marginTop: 16, marginLeft: 32 }}>
                                     <Space>
@@ -6689,7 +6741,6 @@ function ReturnRequestPage() {
                                             onChange={(v) => updateQuantity(item.id, v)}
                                         />
                                     </Space>
-
                                     {reason === 'defective' && (
                                         <div style={{ marginTop: 12 }}>
                                             <Text>Фото дефекта (опционально):</Text>
@@ -6723,7 +6774,6 @@ function ReturnRequestPage() {
                     );
                 })}
             </Card>
-
             <Card title="Причина возврата" style={{ marginBottom: 24 }}>
                 <Select
                     placeholder="Выберите причину"
@@ -6733,7 +6783,6 @@ function ReturnRequestPage() {
                     options={RETURN_REASONS}
                     size="large"
                 />
-
                 <div style={{ marginTop: 16 }}>
                     <Text strong>Комментарий (опционально):</Text>
                     <TextArea
@@ -6747,16 +6796,23 @@ function ReturnRequestPage() {
                     />
                 </div>
             </Card>
-
             <Card style={{ marginBottom: 24, background: '#f5f5f5' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text strong style={{ fontSize: 16 }}>Сумма к возврату:</Text>
+                    <Text strong style={{ fontSize: 16 }}>
+                        Заявок к созданию: {Object.keys(selectedItems).length}
+                    </Text>
                     <Text strong style={{ fontSize: 24, color: '#1890ff' }}>
                         {calculateTotal().toFixed(2)} ₽
                     </Text>
                 </div>
+                {submitting && (
+                    <Progress
+                        percent={progress}
+                        status="active"
+                        style={{ marginTop: 16 }}
+                    />
+                )}
             </Card>
-
             <Button
                 type="primary"
                 size="large"
@@ -6765,7 +6821,10 @@ function ReturnRequestPage() {
                 onClick={handleSubmit}
                 disabled={!reason || Object.keys(selectedItems).length === 0}
             >
-                Отправить заявку на возврат
+                {submitting
+                    ? `Создание заявок... ${Object.keys(selectedItems).length} шт.`
+                    : `Создать ${Object.keys(selectedItems).length} заявок на возврат`
+                }
             </Button>
         </div>
     );
@@ -6773,140 +6832,138 @@ function ReturnRequestPage() {
 
 export default ReturnRequestPage;===== frontend/src/pages/ReturnsPage.jsx =====
 // frontend/src/pages/ReturnsPage.jsx
-
 import React, { useEffect, useState } from 'react';
 import { returnService } from '../services/returnService';
 import {
-    Typography, Table, Tag, Button, Space, Empty, Spin, Popconfirm, message
+  Typography, Table, Tag, Button, Space, Empty, Spin, Popconfirm, message
 } from 'antd';
 import {
-    RotateLeftOutlined, EyeOutlined, CloseCircleOutlined
+  RotateLeftOutlined, EyeOutlined, CloseCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const { Title } = Typography;
 
 const STATUS_CONFIG = {
-    pending:   { color: 'blue',    text: 'Ожидает рассмотрения' },
-    approved:  { color: 'green',   text: 'Одобрено' },
-    rejected:  { color: 'red',     text: 'Отклонено' },
-    refunded:  { color: 'cyan',    text: 'Средства возвращены' },
-    cancelled: { color: 'default', text: 'Отменено' },
-    failed:    { color: 'volcano', text: 'Ошибка возврата' },
+  pending:   { color: 'blue',    text: 'Ожидает рассмотрения' },
+  approved:  { color: 'green',   text: 'Одобрено' },
+  rejected:  { color: 'red',     text: 'Отклонено' },
+  refunded:  { color: 'cyan',    text: 'Средства возвращены' },
+  cancelled: { color: 'default', text: 'Отменено' },
+  failed:    { color: 'volcano', text: 'Ошибка возврата' },
 };
 
 function ReturnsPage() {
-    const [returns, setReturns] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [total, setTotal] = useState(0);
-    const navigate = useNavigate();
+  const [returns, setReturns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const navigate = useNavigate();
 
-    const fetchReturns = async () => {
-        try {
-            const res = await returnService.getReturns();
-            setReturns(res.data.items || []);
-            setTotal(res.data.total || 0);
-        } catch (e) {
-            message.error('Не удалось загрузить возвраты');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const fetchReturns = async () => {
+    try {
+      const res = await returnService.getReturns();
+      setReturns(res.data.items || []);
+      setTotal(res.data.total || 0);
+    } catch (e) {
+      message.error('Не удалось загрузить возвраты');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    useEffect(() => { fetchReturns(); }, []);
+  useEffect(() => { fetchReturns(); }, []);
 
-    const handleCancel = async (returnId) => {
-        try {
-            await returnService.cancelReturn(returnId);
-            message.success('Заявка отменена');
-            fetchReturns();
-        } catch (e) {
-            message.error(e.response?.data?.detail || 'Ошибка отмены');
-        }
-    };
+  const handleCancel = async (returnId) => {
+    try {
+      await returnService.cancelReturn(returnId);
+      message.success('Заявка отменена');
+      fetchReturns();
+    } catch (e) {
+      message.error(e.response?.data?.detail || 'Ошибка отмены');
+    }
+  };
 
-    const columns = [
-        {
-            title: '№',
-            dataIndex: 'id',
-            key: 'id',
-            render: (id) => `#${id.substring(0, 8)}`
-        },
-        {
-            title: 'Дата',
-            dataIndex: 'created_at',
-            key: 'created_at',
-            render: (d) => new Date(d).toLocaleDateString('ru-RU')
-        },
-        {
-            title: 'Сумма',
-            dataIndex: 'total_amount',
-            key: 'total_amount',
-            render: (v) => `${Number(v).toFixed(2)} ₽`
-        },
-        {
-            title: 'Статус',
-            dataIndex: 'status',
-            key: 'status',
-            render: (status) => {
-                const cfg = STATUS_CONFIG[status] || { color: 'default', text: status };
-                return <Tag color={cfg.color}>{cfg.text}</Tag>;
-            }
-        },
-        {
-            title: 'Действия',
-            key: 'actions',
-            render: (_, record) => (
-                <Space>
-                    <Button
-                        size="small"
-                        icon={<EyeOutlined />}
-                        onClick={() => navigate(`/returns/${record.id}`)}
-                    >
-                        Детали
-                    </Button>
-                    {record.status === 'pending' && (
-                        <Popconfirm
-                            title="Отменить заявку?"
-                            onConfirm={() => handleCancel(record.id)}
-                        >
-                            <Button
-                                size="small"
-                                danger
-                                icon={<CloseCircleOutlined />}
-                            >
-                                Отменить
-                            </Button>
-                        </Popconfirm>
-                    )}
-                </Space>
-            )
-        }
-    ];
+  const columns = [
+    {
+      title: '№',
+      dataIndex: 'id',
+      key: 'id',
+      render: (id) => `#${id.substring(0, 8)}`
+    },
+    {
+      title: 'Дата',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (d) => new Date(d).toLocaleDateString('ru-RU')
+    },
+    {
+      title: 'Сумма',
+      dataIndex: 'refund_amount', // ИСПРАВЛЕНО: заменено с total_amount на refund_amount
+      key: 'refund_amount',
+      render: (v) => `${Number(v).toFixed(2)} ₽`
+    },
+    {
+      title: 'Статус',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => {
+        const cfg = STATUS_CONFIG[status] || { color: 'default', text: status };
+        return <Tag color={cfg.color}>{cfg.text}</Tag>;
+      }
+    },
+    {
+      title: 'Действия',
+      key: 'actions',
+      render: (_, record) => (
+        <Space>
+          <Button
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/returns/${record.id}`)}
+          >
+            Детали
+          </Button>
+          {record.status === 'pending' && (
+            <Popconfirm
+              title="Отменить заявку?"
+              onConfirm={() => handleCancel(record.id)}
+            >
+              <Button
+                size="small"
+                danger
+                icon={<CloseCircleOutlined />}
+              >
+                Отменить
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
+      )
+    }
+  ];
 
-    return (
-        <div>
-            <Title level={2}>
-                <RotateLeftOutlined style={{ marginRight: 12 }} />
-                Мои возвраты
-            </Title>
-
-            {loading ? (
-                <div style={{ textAlign: 'center', padding: 60 }}>
-                    <Spin size="large" />
-                </div>
-            ) : returns.length === 0 ? (
-                <Empty description="У вас пока нет возвратов" />
-            ) : (
-                <Table
-                    dataSource={returns}
-                    columns={columns}
-                    rowKey="id"
-                    pagination={{ total, pageSize: 10 }}
-                />
-            )}
+  return (
+    <div>
+      <Title level={2}>
+        <RotateLeftOutlined style={{ marginRight: 12 }} />
+        Мои возвраты
+      </Title>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 60 }}>
+          <Spin size="large" />
         </div>
-    );
+      ) : returns.length === 0 ? (
+        <Empty description="У вас пока нет возвратов" />
+      ) : (
+        <Table
+          dataSource={returns}
+          columns={columns}
+          rowKey="id"
+          pagination={{ total, pageSize: 10 }}
+        />
+      )}
+    </div>
+  );
 }
 
 export default ReturnsPage;===== frontend/src/pages/TryOnPage.jsx =====

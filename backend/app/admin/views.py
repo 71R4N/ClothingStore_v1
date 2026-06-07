@@ -1,3 +1,4 @@
+# backend/app/admin/views.py
 from sqladmin import ModelView, action
 from sqladmin.helpers import get_object_identifier
 from starlette.requests import Request
@@ -16,34 +17,37 @@ from app.tryon.models import TryOnSession
 from app.payments.models import Payment
 from app.returns.models import Return, ReturnItem
 from app.core.database import AsyncSessionLocal
-from app.returns.repositories import ReturnRepo, ReturnItemRepo
+from app.returns.repositories import ReturnRepo
 from app.orders.repositories import OrderRepo, OrderItemRepo
 from app.catalog.repositories import ProductVariantRepo
 from app.returns.services import ReturnService
 
 
 class ReturnAdmin(ModelView, model=Return):
-    """Админ-представление для заявок на возврат."""
+    """Админ-представление для индивидуальных заявок на возврат."""
     name = "Возврат"
     name_plural = "Возвраты товаров"
     icon = "fa-solid fa-rotate-left"
     column_list = [
-        Return.id, Return.order_id, Return.user_id,
-        Return.status, Return.reason_type, Return.total_amount,
+        Return.id, Return.order_id, Return.order_item_id,
+        Return.user_id, Return.status, Return.reason_type,
+        Return.quantity, Return.refund_amount,
         Return.created_at, Return.resolved_at
     ]
     column_details_list = [
-        Return.id, Return.order_id, Return.user_id, Return.guest_email,
+        Return.id, Return.order_id, Return.order_item_id,
+        Return.user_id, Return.guest_email,
         Return.status, Return.reason_type, Return.description,
-        Return.total_amount, Return.refund_payment_id,
-        Return.rejection_reason, Return.created_at,
-        Return.updated_at, Return.resolved_at, Return.resolved_by
+        Return.quantity, Return.refund_amount, Return.photos,
+        Return.refund_payment_id, Return.rejection_reason,
+        Return.created_at, Return.updated_at,
+        Return.resolved_at, Return.resolved_by
     ]
     column_searchable_list = [
         Return.id, Return.guest_email, Return.status
     ]
     column_sortable_list = [
-        Return.created_at, Return.status, Return.total_amount
+        Return.created_at, Return.status, Return.refund_amount
     ]
     column_default_sort = ("created_at", True)
     column_formatters = {
@@ -67,36 +71,30 @@ class ReturnAdmin(ModelView, model=Return):
     can_delete = True
     can_view_details = True
 
+    def _build_service(self, session) -> ReturnService:
+        """Фабрика для создания ReturnService без ReturnItemRepo."""
+        return ReturnService(
+            return_repo=ReturnRepo(session),
+            order_repo=OrderRepo(session),
+            order_item_repo=OrderItemRepo(session),
+            variant_repo=ProductVariantRepo(session),
+        )
+
     @action(
         name="approve",
         label="Одобрить",
         confirmation_message="Одобрить выбранные заявки на возврат? Товары будут возвращены на склад, а средства — отправлены на возврат.",
     )
     async def approve_action(self, request: Request) -> RedirectResponse:
-        """
-        Массовое одобрение заявок на возврат.
-        Возвращает RedirectResponse для корректной работы маршрутов Starlette.
-        """
+        """Массовое одобрение индивидуальных заявок на возврат."""
         pks = request.query_params.getlist("pks")
-        # Формируем URL для редиректа: возвращаемся на предыдущую страницу
         redirect_url = request.headers.get("referer", "/admin/return/list")
 
         if not pks:
             return RedirectResponse(url=redirect_url, status_code=303)
 
         async with AsyncSessionLocal() as session:
-            return_repo = ReturnRepo(session)
-            return_item_repo = ReturnItemRepo(session)
-            order_repo = OrderRepo(session)
-            order_item_repo = OrderItemRepo(session)
-            variant_repo = ProductVariantRepo(session)
-            service = ReturnService(
-                return_repo=return_repo,
-                return_item_repo=return_item_repo,
-                order_repo=order_repo,
-                order_item_repo=order_item_repo,
-                variant_repo=variant_repo,
-            )
+            service = self._build_service(session)
             admin_id_str = request.session.get("admin_user_id")
             admin_id = UUID(admin_id_str) if admin_id_str else None
 
@@ -105,7 +103,6 @@ class ReturnAdmin(ModelView, model=Return):
                     return_id = UUID(str(pk))
                     await service.approve_return(return_id, admin_id)
                 except Exception:
-                    # Ошибки бизнес-логики логируются внутри сервисного слоя
                     pass
 
         return RedirectResponse(url=redirect_url, status_code=303)
@@ -116,37 +113,26 @@ class ReturnAdmin(ModelView, model=Return):
         confirmation_message="Отклонить выбранные заявки? Будет указана стандартная причина отклонения.",
     )
     async def reject_action(self, request: Request) -> RedirectResponse:
-        """
-        Массовое отклонение заявок со стандартной причиной.
-        """
+        """Массовое отклонение заявок со стандартной причиной."""
         pks = request.query_params.getlist("pks")
         redirect_url = request.headers.get("referer", "/admin/return/list")
 
         if not pks:
             return RedirectResponse(url=redirect_url, status_code=303)
 
-        rejection_reason = "Заявка отклонена администратором. Для уточнения причины свяжитесь с поддержкой."
+        rejection_reason = "Заявка отклонена администратором."
 
         async with AsyncSessionLocal() as session:
-            return_repo = ReturnRepo(session)
-            return_item_repo = ReturnItemRepo(session)
-            order_repo = OrderRepo(session)
-            order_item_repo = OrderItemRepo(session)
-            variant_repo = ProductVariantRepo(session)
-            service = ReturnService(
-                return_repo=return_repo,
-                return_item_repo=return_item_repo,
-                order_repo=order_repo,
-                order_item_repo=order_item_repo,
-                variant_repo=variant_repo,
-            )
+            service = self._build_service(session)
             admin_id_str = request.session.get("admin_user_id")
             admin_id = UUID(admin_id_str) if admin_id_str else None
 
             for pk in pks:
                 try:
                     return_id = UUID(str(pk))
-                    await service.reject_return(return_id, admin_id, rejection_reason)
+                    await service.reject_return(
+                        return_id, admin_id, rejection_reason
+                    )
                 except Exception:
                     pass
 
@@ -154,9 +140,12 @@ class ReturnAdmin(ModelView, model=Return):
 
 
 class ReturnItemAdmin(ModelView, model=ReturnItem):
-    """Админ-представление для позиций возврата."""
-    name = "Позиция возврата"
-    name_plural = "Позиции возвратов"
+    """
+    Админ-представление для устаревших позиций возврата.
+    Сохранено для просмотра исторических данных таблицы return_items.
+    """
+    name = "Позиция возврата (устаревшее)"
+    name_plural = "Позиции возвратов (устаревшее)"
     icon = "fa-solid fa-list-check"
 
     column_list = [

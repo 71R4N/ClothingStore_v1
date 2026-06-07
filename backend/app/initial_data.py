@@ -28,6 +28,7 @@ CATEGORIES = [
     {"name": "Платья", "slug": "dresses", "parent_slug": "women"},
     {"name": "Кроссовки", "slug": "sneakers", "parent_slug": "shoes"},
     {"name": "Сумки", "slug": "bags", "parent_slug": "accessories"},
+    {"name": "Рубашки", "slug": "t-shirts", "parent_slug": "men"},
 ]
 
 PRODUCTS = [
@@ -43,7 +44,7 @@ PRODUCTS = [
         "sizes": ["S", "M", "L", "XL"],
         "size_stocks": {"S": 10, "M": 20, "L": 15, "XL": 5},
         "colors": [
-            {"color_name": "Белый", "color_hex": "#FFFFFF"},
+            {"color_name": "Черный", "color_hex": "#000000"},
             {"color_name": "Синий", "color_hex": "#0000FF"},
         ],
     },
@@ -93,6 +94,38 @@ PRODUCTS = [
         "colors": [
             {"color_name": "Коричневый", "color_hex": "#8B4513"},
             {"color_name": "Черный", "color_hex": "#000000"},
+        ],
+    },
+{
+        "name": "Футболка",
+        "slug": "t-shirt",
+        "description": "Черная футболка с круглым вырезом",
+        "category_slug": "t-shirts",
+        "brand": "Street",
+        "is_active": True,
+        "base_sku": "CST1111",
+        "base_price": 2000,
+        "sizes": ["S", "M", "L", "XL"],
+        "size_stocks": {"S": 10, "M": 20, "L": 15, "XL": 5},
+        "colors": [
+            {"color_name": "Черный", "color_hex": "#000000"},
+            {"color_name": "Синий", "color_hex": "#0000FF"},
+        ],
+    },
+{
+        "name": "Футболка",
+        "slug": "t-shirt2",
+        "description": "Белая футболка с круглым вырезом",
+        "category_slug": "t-shirts",
+        "brand": "Street",
+        "is_active": True,
+        "base_sku": "CST1112",
+        "base_price": 2000,
+        "sizes": ["S", "M", "L", "XL"],
+        "size_stocks": {"S": 10, "M": 20, "L": 15, "XL": 5},
+        "colors": [
+            {"color_name": "Черный", "color_hex": "#000000"},
+            {"color_name": "Белый", "color_hex": "#FFFFFF"},
         ],
     },
 ]

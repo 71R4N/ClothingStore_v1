@@ -3,9 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { orderService } from '../services/orderService';
 import { Descriptions, List, Typography, Spin, Image, Tag, Button, Alert, Space, Divider } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, RotateLeftOutlined } from '@ant-design/icons';
 import { message } from 'antd';
-import { RotateLeftOutlined } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
 
@@ -15,6 +14,15 @@ function OrderDetailPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const navigate = useNavigate();
+
+    const returnStatusConfig = {
+        pending: { text: 'Оформляется возврат', color: 'gold', textColor: '#000' },
+        approved: { text: 'Оформлен возврат', color: 'blue', textColor: '#000' },
+        refunded: { text: 'Оформлен возврат', color: 'blue', textColor: '#000' },
+        rejected: { text: 'Товар возврату не подлежит', color: 'red', textColor: '#000' },
+        failed: { text: 'Ошибка возврата', color: 'volcano' },
+        cancelled: { text: 'Возврат отменен', color: 'default' },
+    };
 
     useEffect(() => {
         const fetchOrder = async () => {
@@ -28,12 +36,10 @@ function OrderDetailPage() {
                 const errorMsg = err.response?.data?.detail || 'Не удалось загрузить информацию о заказе';
                 setError(errorMsg);
                 message.error(errorMsg);
-                // Не делаем автоматический редирект, даем пользователю увидеть ошибку
             } finally {
                 setLoading(false);
             }
         };
-
         if (id) {
             fetchOrder();
         }
@@ -111,11 +117,9 @@ function OrderDetailPage() {
             >
                 Назад к списку заказов
             </Button>
-
             <Title level={2}>
                 Заказ #{order.id.substring(0, 8)}
             </Title>
-
             <Descriptions
                 column={{ xs: 1, sm: 2 }}
                 bordered
@@ -143,13 +147,10 @@ function OrderDetailPage() {
                     </Text>
                 </Descriptions.Item>
             </Descriptions>
-
             <Divider />
-
             <Title level={4} style={{ marginBottom: 16 }}>
                 Состав заказа ({order.items.length} {order.items.length === 1 ? 'товар' : 'товаров'})
             </Title>
-
             <List
                 itemLayout="horizontal"
                 dataSource={order.items}
@@ -159,63 +160,76 @@ function OrderDetailPage() {
                     const color = variant.color || {};
                     const size = variant.size || {};
 
+                    const returnCfg = item.return_status ? returnStatusConfig[item.return_status] : null;
+                    const isReturned = ['approved', 'refunded'].includes(item.return_status);
+
                     return (
-                        <List.Item style={{ padding: '16px 0' }}>
-                            <List.Item.Meta
-                                avatar={
-                                    <Image
-                                        src={variant.image_url || 'https://via.placeholder.com/100x120?text=No+Image'}
-                                        width={100}
-                                        height={120}
-                                        style={{ objectFit: 'cover', borderRadius: 8 }}
-                                        preview={false}
-                                        fallback="https://via.placeholder.com/100x120?text=No+Image"
-                                    />
-                                }
-                                title={
-                                    <Space direction="vertical" size={0}>
-                                        <Text strong style={{ fontSize: 16 }}>
-                                            {product.name || `Товар #${item.variant_id}`}
-                                        </Text>
+                        <List.Item
+                            style={{
+                                padding: '16px',
+                                background: isReturned ? '#fff' : '#fff',
+                                borderRadius: 8,
+                                marginBottom: 12,
+                                border: isReturned ? '1px solid #ffe58f' : '1px solid #f0f0f0',
+                                display: 'block'
+                            }}
+                        >
+                            <div style={{ display: 'flex', gap: 16 }}>
+                                <Image
+                                    src={variant.image_url || 'https://via.placeholder.com/100x120?text=No+Image'}
+                                    width={100}
+                                    height={120}
+                                    style={{ objectFit: 'cover', borderRadius: 8 }}
+                                    preview={false}
+                                    fallback="https://via.placeholder.com/100x120?text=No+Image"
+                                />
+                                <div style={{ flex: 1 }}>
+                                    <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                        <Space wrap>
+                                            <Text strong style={{ fontSize: 16 }}>
+                                                {product.name || `Товар #${item.variant_id}`}
+                                            </Text>
+                                            {returnCfg && (
+                                                <Tag
+                                                    color={returnCfg.color}
+                                                    style={{ color: returnCfg.textColor || '#fff', fontWeight: 500 }}
+                                                >
+                                                    {returnCfg.text}
+                                                </Tag>
+                                            )}
+                                        </Space>
                                         <Text type="secondary" style={{ fontSize: 13 }}>
                                             Артикул: {variant.sku || 'N/A'}
                                         </Text>
-                                    </Space>
-                                }
-                                description={
-                                    <Space direction="vertical" size={4} style={{ marginTop: 8 }}>
-                                        {color.color_name && (
-                                            <Space size={4}>
-                                                <div
-                                                    style={{
-                                                        width: 16,
-                                                        height: 16,
+                                        <Space direction="vertical" size={2} style={{ marginTop: 4 }}>
+                                            {color.color_name && (
+                                                <Space size={4}>
+                                                    <div style={{
+                                                        width: 14, height: 14,
                                                         backgroundColor: color.color_hex,
                                                         borderRadius: '50%',
                                                         border: '1px solid #d9d9d9'
-                                                    }}
-                                                />
-                                                <Text>Цвет: {color.color_name}</Text>
-                                            </Space>
-                                        )}
-                                        {size.size_label && (
-                                            <Text>Размер: {size.size_label}</Text>
-                                        )}
-                                        <Text>Количество: {item.quantity} шт.</Text>
+                                                    }} />
+                                                    <Text style={{ fontSize: 13 }}>Цвет: {color.color_name}</Text>
+                                                </Space>
+                                            )}
+                                            {size.size_label && (
+                                                <Text style={{ fontSize: 13 }}>Размер: {size.size_label}</Text>
+                                            )}
+                                            <Text style={{ fontSize: 13 }}>Количество: {item.quantity} шт.</Text>
+                                        </Space>
                                     </Space>
-                                }
-                            />
-                            <div style={{ textAlign: 'right', minWidth: 120 }}>
-                                <div style={{ fontSize: 18, fontWeight: 600, color: '#1890ff' }}>
-                                    {Number(item.price_at_purchase).toFixed(2)} ₽
                                 </div>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    за единицу
-                                </Text>
-                                <div style={{ marginTop: 4 }}>
-                                    <Text strong>
-                                        Итого: {(Number(item.price_at_purchase) * item.quantity).toFixed(2)} ₽
-                                    </Text>
+                                <div style={{ textAlign: 'right', minWidth: 120 }}>
+                                    <div style={{ fontSize: 18, fontWeight: 600, color: '#1890ff' }}>
+                                        {Number(item.price_at_purchase).toFixed(2)} ₽
+                                    </div>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>за единицу</Text>
+                                    <div style={{ marginTop: 4 }}>
+                                        <Text strong>
+                                            Итого: {(Number(item.price_at_purchase) * item.quantity).toFixed(2)} ₽
+                                        </Text>
+                                    </div>
                                 </div>
                             </div>
                         </List.Item>
@@ -225,7 +239,21 @@ function OrderDetailPage() {
             {order.status === 'delivered' && (() => {
                 const deliveryDate = new Date(order.updated_at || order.created_at);
                 const daysSinceDelivery = (new Date() - deliveryDate) / (1000 * 60 * 60 * 24);
-                const canReturn = daysSinceDelivery <= 14 && !order.has_returns;
+                const allItemsReturned = order.items.every(item =>
+                    ['pending', 'approved', 'refunded', 'rejected'].includes(item.return_status)
+                );
+                const canReturn = daysSinceDelivery <= 14 && !allItemsReturned;
+
+                let buttonText = 'Вернуть товары';
+                let tooltip = `Возврат возможен в течение 14 дней с момента доставки (осталось ${Math.max(0, Math.ceil(14 - daysSinceDelivery))} дн.)`;
+
+                if (allItemsReturned) {
+                    buttonText = 'Все товары в заявках на возврат';
+                    tooltip = 'Для всех товаров в этом заказе уже существуют заявки на возврат';
+                } else if (daysSinceDelivery > 14) {
+                    buttonText = 'Срок возврата истёк';
+                    tooltip = 'Срок возврата (14 дней) истёк';
+                }
 
                 return (
                     <div style={{ marginTop: 24 }}>
@@ -237,23 +265,17 @@ function OrderDetailPage() {
                             disabled={!canReturn}
                             block
                         >
-                            {order.has_returns ? 'Возврат уже оформлен' : 'Вернуть товары'}
+                            {buttonText}
                         </Button>
                         <Text type="secondary" style={{
                             display: 'block', textAlign: 'center',
                             marginTop: 8, fontSize: 12
                         }}>
-                            {canReturn
-                                ? `Возврат возможен в течение 14 дней с момента доставки (осталось ${Math.max(0, Math.ceil(14 - daysSinceDelivery))} дн.)`
-                                : daysSinceDelivery > 14
-                                    ? 'Срок возврата (14 дней) истёк'
-                                    : 'Возврат уже оформлен для этого заказа'
-                            }
+                            {tooltip}
                         </Text>
                     </div>
                 );
             })()}
-
             {order.status === 'pending' && (
                 <Alert
                     message="Заказ ожидает оплаты"
