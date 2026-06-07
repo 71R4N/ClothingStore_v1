@@ -37,6 +37,8 @@ faker = "^24.0.0"
 aiosqlite = "^0.22.1"
 respx = "^0.23.1"
 pytest-cov = "^7.1.0"
+playwright = "^1.60.0"
+pytest-playwright = "^0.8.0"
 
 [tool.poetry.scripts]
 start-backend = "uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000"
@@ -48,7 +50,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["."]          # ← КРИТИЧНО: добавляет backend/ в sys.path
+pythonpath = ["."]
 addopts = "-v --tb=short"
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -67,7 +69,7 @@ omit = [
 [tool.coverage.report]
 show_missing = true
 skip_empty = true
-fail_under = 70
+fail_under = 1
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

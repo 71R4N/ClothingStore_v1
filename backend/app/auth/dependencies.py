@@ -1,6 +1,7 @@
 from fastapi import Depends, Request, status
 from fastapi.exceptions import HTTPException
 from typing import Annotated
+from uuid import UUID
 from app.core.database import SessionDbDep
 from app.core.security import decode_access_token
 from app.users.repositories import UserRepo
@@ -34,7 +35,14 @@ async def get_current_user(
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    user_id = payload["sub"]
+    try:
+        user_id = UUID(payload["sub"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload"
+        )
+
     try:
         user = await user_service.get_by_id(user_id)
     except Exception:
