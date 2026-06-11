@@ -1,6 +1,5 @@
 import httpx
 import base64
-import os
 import hashlib
 import logging
 from typing import Optional
@@ -9,14 +8,11 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Внутренний адрес Nginx для скачивания файлов внутри Docker-сети
 INTERNAL_NGINX_URL = "http://nginx:80"
 
-# Директория для сохранения результатов инференса
 RESULTS_DIR = Path("/app/static/tryon_results")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Таймауты по категориям операций (секунды)
 HEALTHCHECK_TIMEOUT = 5.0
 IMAGE_DOWNLOAD_TIMEOUT = 15.0
 
@@ -24,12 +20,6 @@ IMAGE_DOWNLOAD_TIMEOUT = 15.0
 class CatVTONClient:
     """
     Асинхронный HTTP-клиент для взаимодействия с внешним ML-сервисом CatVTON.
-
-    Обеспечивает:
-    - Кэширование результатов на основе хэша входных изображений
-    - Проверку готовности модели перед отправкой запроса
-    - Валидацию MIME-типов загружаемых изображений
-    - Graceful degradation с возвратом fallback-изображения при сбоях
     """
 
     def __init__(self):
@@ -41,7 +31,6 @@ class CatVTONClient:
     def _make_absolute_url(self, url: str) -> str:
         """
         Преобразует относительный путь в абсолютный URL для внутреннего скачивания.
-        Например: '/static/uploads/img.png' -> 'http://nginx:80/static/uploads/img.png'
         """
         if not url:
             return url
@@ -97,12 +86,10 @@ class CatVTONClient:
             if resp.status_code != 200:
                 logger.warning(f"Healthcheck returned status {resp.status_code}")
                 return False
-
             data = resp.json()
             if not data.get("model_loaded", False):
                 logger.warning("ML model is not loaded yet")
                 return False
-
             return True
         except Exception as e:
             logger.warning(f"Healthcheck failed: {e}")
@@ -124,10 +111,8 @@ class CatVTONClient:
                 raise ValueError(
                     f"Invalid content-type for {label}: {content_type}"
                 )
-
             if len(resp.content) == 0:
                 raise ValueError(f"Empty image data for {label}")
-
             return resp.content
         except httpx.HTTPError as e:
             raise ValueError(f"Failed to download {label}: {e}")
@@ -160,13 +145,9 @@ class CatVTONClient:
             f"Starting try-on: person={person_img_url}, "
             f"garment={garment_img_url}, mask={mask_img_url}"
         )
-
-        # === 1. Проверка флага включения ===
         if not self.enabled:
             logger.warning("CatVTON is disabled in configuration")
             return self._make_fallback("ML service disabled by config")
-
-        # === 2. Поиск в кэше ===
         cache_key = self._compute_cache_key(
             person_img_url, garment_img_url, mask_img_url
         )
@@ -177,21 +158,14 @@ class CatVTONClient:
                 "error": None,
                 "fallback": False,
             }
-
-        # === 3–6. Взаимодействие с ML-сервисом ===
         async with httpx.AsyncClient() as client:
-            # 3. Healthcheck
             if not await self._check_health(client):
                 error_msg = "ML service healthcheck failed"
                 logger.error(error_msg)
                 return self._make_fallback(error_msg)
-
-            # Формируем абсолютные URL для скачивания внутри Docker-сети
             abs_person_url = self._make_absolute_url(person_img_url)
             abs_garment_url = self._make_absolute_url(garment_img_url)
             abs_mask_url = self._make_absolute_url(mask_img_url) if mask_img_url else None
-
-            # 4. Загрузка исходных изображений
             try:
                 person_bytes = await self._download_image(
                     client, abs_person_url, "person"
@@ -202,14 +176,11 @@ class CatVTONClient:
             except ValueError as e:
                 logger.error(str(e))
                 return self._make_fallback(str(e))
-
-            # 5. Подготовка опциональной маски
             files = {
                 "person_image": ("person.jpg", person_bytes, "image/jpeg"),
                 "garment_image": ("garment.jpg", garment_bytes, "image/jpeg"),
             }
             data = {"category": "upper_body", "num_inference_steps": "30"}
-
             if abs_mask_url:
                 try:
                     mask_bytes = await self._download_image(
@@ -218,8 +189,6 @@ class CatVTONClient:
                     files["mask_image"] = ("mask.png", mask_bytes, "image/png")
                 except ValueError as e:
                     logger.warning(f"Mask download skipped: {e}")
-
-            # 6. Отправка инференс-запроса
             try:
                 response = await client.post(
                     f"{self.base_url}/predict",
@@ -248,8 +217,6 @@ class CatVTONClient:
                 error_msg = f"ML service network error: {e}"
                 logger.error(error_msg)
                 return self._make_fallback(error_msg)
-
-            # 7. Парсинг и сохранение результата
             try:
                 if payload.get("status") != "success":
                     error_msg = (
@@ -258,18 +225,13 @@ class CatVTONClient:
                     )
                     logger.error(error_msg)
                     return self._make_fallback(error_msg)
-
                 if "result_image_base64" in payload:
                     img_bytes = base64.b64decode(payload["result_image_base64"])
                     fmt = payload.get("format", "png")
-
-                    # Сохранение локально с детерминированным именем
                     filename = f"result_{cache_key}.{fmt}"
                     result_path = RESULTS_DIR / filename
-
                     with open(result_path, "wb") as f:
                         f.write(img_bytes)
-
                     result_url = f"/static/tryon_results/{filename}"
                     logger.info(f"Try-on completed successfully: {result_url}")
                     return {
@@ -277,9 +239,7 @@ class CatVTONClient:
                         "error": None,
                         "fallback": False,
                     }
-
                 elif "result_image_url" in payload:
-                    # ML-сервис сам разместил изображение и вернул URL
                     result_url = payload["result_image_url"]
                     logger.info(f"Try-on completed (remote URL): {result_url}")
                     return {
@@ -292,7 +252,6 @@ class CatVTONClient:
                         f"Unsupported ML response structure. "
                         f"Keys: {list(payload.keys())}"
                     )
-
             except ValueError as e:
                 error_msg = f"Invalid ML response: {e}"
                 logger.error(error_msg)

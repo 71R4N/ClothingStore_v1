@@ -11,9 +11,6 @@ from app.auth.exceptions import (
 )
 from app.auth.schemas import RegisterRequest
 from app.users.models import User
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -24,7 +21,6 @@ class AuthService:
         existing = await self.user_service.get_by_email(data.email)
         if existing:
             raise EmailAlreadyExistsError()
-
         from app.users.schemas import UserCreate
         user_data = UserCreate(
             email=data.email,
@@ -44,51 +40,28 @@ class AuthService:
             client_ip: str | None = None
     ) -> User:
         attempts_key = f"login_attempts:{email}:{client_ip}"
-        attempts = 0
-
-        try:
-            attempts_str = await redis_client.get(attempts_key)
-            attempts = int(attempts_str) if attempts_str else 0
-        except Exception as e:
-            logger.error(f"Redis error during login attempts check: {e}")
-
-        # Проверка капчи после 3 неудачных попыток
+        attempts_str = await redis_client.get(attempts_key)
+        attempts = int(attempts_str) if attempts_str else 0
         if attempts >= 3:
             if not captcha_response:
                 raise CaptchaRequiredError()
-
             try:
                 async with httpx.AsyncClient() as client:
                     resp = await client.post(
                         "https://www.google.com/recaptcha/api/siteverify",
-                        data={
-                            "secret": settings.RECAPTCHA_SECRET_KEY,
+                        data={"secret": settings.RECAPTCHA_SECRET_KEY,
                             "response": captcha_response,
-                            "remoteip": client_ip
-                        }
-                    )
+                            "remoteip": client_ip})
                     result = resp.json()
-                    # Для reCAPTCHA v3 score < 0.5 считается ботом
                     if not result.get("success") or result.get("score", 1.0) < 0.5:
                         raise InvalidCaptchaError()
             except httpx.HTTPError as e:
-                logger.error(f"Recaptcha verification failed: {e}")
                 raise InvalidCaptchaError()
-
-        # Основная проверка
         user = await self.user_service.get_by_email(email)
         if not user or not verify_password(password, user.password_hash):
-            try:
-                new_attempts = attempts + 1
-                await redis_client.setex(attempts_key, 60, str(new_attempts))
-            except Exception as e:
-                logger.error(f"Redis error during login attempts update: {e}")
+            new_attempts = attempts + 1
+            await redis_client.setex(attempts_key, 60, str(new_attempts))
             raise InvalidCredentialsError()
-
-        # Успешный вход - сбрасываем счетчик
-        try:
-            await redis_client.delete(attempts_key)
-        except Exception as e:
-            logger.error(f"Redis error during login attempts reset: {e}")
+        await redis_client.delete(attempts_key)
 
         return user

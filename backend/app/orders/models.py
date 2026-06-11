@@ -100,7 +100,6 @@ class OrderItem(Base):
         cascade="all, delete-orphan"
     )
 
-    # Новая связь для индивидуальных возвратов
     returns: Mapped[List["Return"]] = relationship(
         "Return",
         back_populates="order_item",
@@ -109,12 +108,6 @@ class OrderItem(Base):
 
     @property
     def return_status(self) -> Optional[str]:
-        """
-        Возвращает статус возврата для данной позиции заказа.
-        Приоритет статусов: refunded > approved > pending > rejected > failed > cancelled.
-        """
-        # ИСПРАВЛЕНО: Используем self.returns (новая модель Return),
-        # которая жадно загружается в репозитории, вместо self.return_items
         returns_list = getattr(self, 'returns', None)
         if not returns_list:
             return None
@@ -127,7 +120,6 @@ class OrderItem(Base):
         best_priority = -1
 
         for r in returns_list:
-            # Безопасное получение значения enum
             status_val = r.status.value if hasattr(r.status, 'value') else str(r.status)
             p = priority.get(status_val, 0)
             if p > best_priority:

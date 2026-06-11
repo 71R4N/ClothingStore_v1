@@ -54,11 +54,9 @@ async def get_current_user(
     return user
 
 
-# Обязательная авторизация (для защищенных роутов)
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
-# Опциональная авторизация (для роутов, где пользователь может быть гостем)
 async def get_optional_user(
         request: Request,
         user_service: UserService = Depends(get_user_service),

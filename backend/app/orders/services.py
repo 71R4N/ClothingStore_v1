@@ -31,12 +31,10 @@ class OrderService:
             session_id: Optional[str],
             data: OrderCreate
     ) -> Order:
-        # 1. Получаем корзину
         cart_items = await self.cart_service.get_cart(user_id, session_id)
         if not cart_items:
             raise ValueError("Cart is empty")
 
-        # 2. Проверяем наличие всех вариантов и вычисляем сумму
         total = 0.0
         validated_items = []
         for cart_item in cart_items:
@@ -52,10 +50,9 @@ class OrderService:
                 "variant_id": cart_item.variant_id,
                 "quantity": cart_item.quantity,
                 "price_at_purchase": float(variant.price),
-                "variant": variant  # Сохраняем ссылку на объект для оптимизации обновления остатков
+                "variant": variant
             })
 
-        # 3. Создаём заказ напрямую через ORM-модель, минуя Pydantic-схему OrderCreate
         order = Order(
             user_id=user_id,
             guest_email=data.guest_email,
@@ -65,9 +62,8 @@ class OrderService:
             status="pending"
         )
         self.order_repo.session.add(order)
-        await self.order_repo.session.flush()  # Фиксируем для генерации и получения order.id
+        await self.order_repo.session.flush()
 
-        # 4. Создаём позиции заказа (OrderItem)
         for item_data in validated_items:
             order_item = OrderItem(
                 order_id=order.id,
@@ -77,18 +73,14 @@ class OrderService:
             )
             self.order_repo.session.add(order_item)
 
-        # 5. Уменьшаем остатки на складе
         for item_data in validated_items:
             variant = item_data["variant"]
             variant.stock_quantity -= item_data["quantity"]
 
-        # 6. Очищаем корзину пользователя/гостя
         await self.cart_service.clear_cart(user_id, session_id)
 
-        # 7. Коммитим единую транзакцию
         await self.order_repo.session.commit()
 
-        # 8. Возвращаем заказ с жадно подгруженными связями (items, variants)
         return await self.get_order(order.id)
 
     async def get_order(self, order_id: UUID) -> Order:
@@ -107,17 +99,11 @@ class OrderService:
             skip: int = 0,
             limit: int = 20
     ):
-        """
-        Возвращает заказы пользователя с фильтрацией по группе статусов.
-        """
         return await self.order_repo.get_user_orders_by_group(
             user_id, status_group, skip, limit
         )
 
     async def cancel_order_by_user(self, order_id: UUID, user_id: UUID):
-        """
-        Позволяет пользователю отменить собственный заказ в статусе PENDING.
-        """
         order = await self.get_order(order_id)
 
         if order.user_id != user_id:
@@ -128,13 +114,11 @@ class OrderService:
                 detail=f"Cannot cancel order in status {order.status}. Only pending orders can be cancelled."
             )
 
-        # Возвращаем остатки на склад
         for item in order.items:
             variant = await self.variant_repo.read_by_id(item.variant_id)
             if variant:
                 variant.stock_quantity += item.quantity
 
-        # Обновляем статус заказа
         update_schema = OrderStatusUpdate(status=OrderStatus.CANCELLED.value)
         await self.order_repo.update(update_schema, order_id, exclude_unset=True)
 
@@ -143,7 +127,6 @@ class OrderService:
     async def update_status(self, order_id: UUID, status: str):
         order = await self.get_order(order_id)
 
-        # Проверка допустимости перехода
         valid_transitions = {
             "pending": ["processing", "cancelled"],
             "processing": ["shipped", "cancelled"],

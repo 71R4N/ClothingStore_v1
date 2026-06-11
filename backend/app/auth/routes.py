@@ -21,15 +21,11 @@ async def register(
 ):
     auth_svc = AuthService(user_svc)
     user_id = await auth_svc.register(data)
-
-    # При регистрации переносим гостевую корзину и избранное в новый аккаунт
     if session_id and session:
         cart_repo = CartRepo(session)
         wishlist_repo = WishlistRepo(session)
-
         await cart_repo.merge_session_cart_to_user(user_id, session_id)
         await wishlist_repo.merge_session_wishlist_to_user(user_id, session_id)
-
     user = await user_svc.get_by_id(user_id)
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -41,23 +37,8 @@ async def register(
         samesite="lax",
         max_age=7 * 24 * 60 * 60
     )
-    # Очищаем гостевую сессию после регистрации
     response.delete_cookie("session_id")
     return {"access_token": access_token, "token_type": "bearer"}
-
-
-@router.get("/csrf")
-async def get_csrf_token(response: Response):
-    csrf_token = generate_csrf_token()
-    response.set_cookie(
-        key="csrf_token",
-        value=csrf_token,
-        httponly=False,
-        secure=False,
-        samesite="lax",
-        max_age=60 * 60 * 24
-    )
-    return {"status": "ok"}
 
 
 @router.post("/login")
@@ -85,10 +66,22 @@ async def login(
         samesite="lax",
         max_age=7 * 24 * 60 * 60
     )
-    # При входе в существующий аккаунт НЕ переносим данные из гостевой сессии
-    # Просто очищаем гостевую сессию
     response.delete_cookie("session_id")
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/csrf")
+async def get_csrf_token(response: Response):
+    csrf_token = generate_csrf_token()
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=False,
+        samesite="lax",
+        max_age=60 * 60 * 24
+    )
+    return {"status": "ok"}
 
 
 @router.post("/logout")

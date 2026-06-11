@@ -41,10 +41,8 @@ class TryOnService:
         if not session:
             logger.error(f"Session {session_id} not found")
             raise TryOnSessionNotFoundError()
-        # Обновляем статус
         session.status = "processing"
         await self.tryon_repo.session.commit()
-        # Запускаем обработку
         start = datetime.utcnow()
         result = await self.ml_client.run_tryon(
             person_img_url=session.person_image_url,
@@ -53,7 +51,6 @@ class TryOnService:
         )
         end = datetime.utcnow()
         duration = int((end - start).total_seconds() * 1000)
-        # Обновляем результаты
         if result.get("error"):
             session.status = "failed"
             session.error_message = result["error"]

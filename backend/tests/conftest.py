@@ -1,11 +1,8 @@
-# backend/tests/conftest.py (обновлённые фикстуры)
-
 import asyncio
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from unittest.mock import AsyncMock
 import uuid
 
 from app.core.database import Base, get_db_session
@@ -16,7 +13,6 @@ from app.catalog.models import Category, Product, ProductSize, ProductColor, Pro
 
 @pytest.fixture(scope="session")
 def event_loop():
-    """Создаёт единый event loop для всей сессии тестирования."""
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
@@ -24,7 +20,6 @@ def event_loop():
 
 @pytest_asyncio.fixture(scope="function")
 async def async_engine():
-    """Создаёт in-memory SQLite движок для изоляции тестов."""
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         echo=False,
@@ -39,10 +34,6 @@ async def async_engine():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(async_engine):
-    """
-    Создаёт асинхронную сессию БД с использованием savepoint.
-    Это позволяет сервисам вызывать commit() без закрытия тестовой транзакции.
-    """
     async with async_engine.connect() as conn:
         trans = await conn.begin()
 
@@ -60,8 +51,6 @@ async def db_session(async_engine):
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session):
-    """HTTP-клиент для интеграционных тестов с переопределённой БД."""
-
     async def override_get_db():
         yield db_session
 
@@ -76,7 +65,6 @@ async def client(db_session):
 
 @pytest_asyncio.fixture
 async def mock_redis(monkeypatch):
-    """Подменяет Redis-клиент на in-memory заглушку."""
     storage = {}
 
     class FakeRedis:
@@ -97,7 +85,6 @@ async def mock_redis(monkeypatch):
 
 @pytest_asyncio.fixture
 async def test_user(db_session) -> User:
-    """Создаёт тестового пользователя с хэшем пароля."""
     from passlib.context import CryptContext
     pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
     user = User(
@@ -110,14 +97,13 @@ async def test_user(db_session) -> User:
         is_active=True,
     )
     db_session.add(user)
-    await db_session.commit()  # Создаст savepoint, а не закроет транзакцию
+    await db_session.commit()
     await db_session.refresh(user)
     return user
 
 
 @pytest_asyncio.fixture
 async def test_product(db_session) -> dict:
-    """Создаёт тестовый товар с вариантом (цвет + размер)."""
     category = Category(name="Test Cat", slug="test-cat")
     db_session.add(category)
     await db_session.flush()
@@ -159,7 +145,6 @@ async def test_product(db_session) -> dict:
 
 @pytest.fixture
 def auth_headers(test_user) -> dict:
-    """Возвращает заголовки авторизации для тестового пользователя."""
     from app.core.security import create_access_token
     token = create_access_token(data={"sub": str(test_user.id)})
     return {"Authorization": f"Bearer {token}"}

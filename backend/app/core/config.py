@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     RECAPTCHA_SITE_KEY: str = ""
     RECAPTCHA_SECRET_KEY: str = ""
 
-    # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
@@ -34,10 +33,9 @@ class Settings(BaseSettings):
     YOOKASSA_RETURN_URL: str = "http://localhost:5173/payment/status"
     YOOKASSA_CANCEL_URL: str = "http://localhost:5173/payment/status"
 
-    SESSION_SECRET_KEY: str = "change-me-in-production"
-    ADMIN_SECRET_KEY: str = "change-me-in-production"
+    SESSION_SECRET_KEY: str = "change-me"
+    ADMIN_SECRET_KEY: str = "change-me"
 
-    # CatVTON
     CATVTON_API_URL: str = "http://localhost:8001"
     CATVTON_TIMEOUT: int = 300
     CATVTON_ENABLED: bool = False

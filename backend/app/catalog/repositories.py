@@ -13,7 +13,6 @@ class CategoryRepo(SqlAlchemyRepo):
         return result.scalar_one_or_none()
 
     async def get_tree(self) -> list[Category]:
-        """Возвращает корневые категории с подкатегориями (до 2 уровней)."""
         stmt = (
             select(self.model)
             .where(self.model.parent_id.is_(None))
@@ -45,10 +44,8 @@ class ProductRepo(SqlAlchemyRepo):
             selectinload(Product.variants).selectinload(ProductVariant.color),
             selectinload(Product.variants).selectinload(ProductVariant.size),
         )
-
         if category_id:
             stmt = stmt.where(Product.category_id == category_id)
-
         if search:
             stmt = stmt.where(
                 or_(
@@ -56,7 +53,6 @@ class ProductRepo(SqlAlchemyRepo):
                     Product.description.ilike(f"%{search}%")
                 )
             )
-
         if min_price is not None or max_price is not None:
             price_conditions = []
             if min_price is not None:
@@ -69,8 +65,6 @@ class ProductRepo(SqlAlchemyRepo):
                     select(ProductVariant.product_id).where(and_(*price_conditions))
                 )
             )
-
-        # Сортировка по цене через подзапрос
         if sort_by == "price":
             min_price_subq = (
                 select(
@@ -84,12 +78,9 @@ class ProductRepo(SqlAlchemyRepo):
             sort_col = min_price_subq.c.min_price
             stmt = stmt.order_by(sort_col.asc() if order == "asc" else sort_col.desc().nulls_last())
         elif sort_by == "created_at":
-            stmt = stmt.order_by(
-                Product.created_at.asc() if order == "asc" else Product.created_at.desc()
-            )
+            stmt = stmt.order_by(Product.created_at.asc() if order == "asc" else Product.created_at.desc())
         else:
             stmt = stmt.order_by(Product.id.desc())
-
         stmt = stmt.offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return result.scalars().unique().all()
@@ -98,13 +89,10 @@ class ProductRepo(SqlAlchemyRepo):
         stmt = (
             select(self.model)
             .where(self.model.slug == slug)
-            .options(
-                selectinload(self.model.sizes),
-                selectinload(self.model.colors),
-                selectinload(self.model.variants).selectinload(ProductVariant.color),
-                selectinload(self.model.variants).selectinload(ProductVariant.size),
-            )
-        )
+            .options(selectinload(self.model.sizes),
+                    selectinload(self.model.colors),
+                    selectinload(self.model.variants).selectinload(ProductVariant.color),
+                    selectinload(self.model.variants).selectinload(ProductVariant.size),))
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
