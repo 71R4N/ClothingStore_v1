@@ -18,9 +18,6 @@ IMAGE_DOWNLOAD_TIMEOUT = 15.0
 
 
 class CatVTONClient:
-    """
-    Асинхронный HTTP-клиент для взаимодействия с внешним ML-сервисом CatVTON.
-    """
 
     def __init__(self):
         self.base_url = settings.CATVTON_API_URL.rstrip("/")
@@ -29,9 +26,6 @@ class CatVTONClient:
         self.fallback_image = settings.CATVTON_FALLBACK_IMAGE
 
     def _make_absolute_url(self, url: str) -> str:
-        """
-        Преобразует относительный путь в абсолютный URL для внутреннего скачивания.
-        """
         if not url:
             return url
         if url.startswith("http://") or url.startswith("https://"):
@@ -40,7 +34,6 @@ class CatVTONClient:
         return f"{INTERNAL_NGINX_URL}/{clean_path}"
 
     def _make_fallback(self, error: Optional[str] = None) -> dict:
-        """Формирует унифицированный fallback-ответ с изображением-заглушкой."""
         return {
             "result_image_url": self.fallback_image,
             "error": error,
@@ -53,18 +46,10 @@ class CatVTONClient:
             garment_url: str,
             mask_url: Optional[str] = None,
     ) -> str:
-        """
-        Вычисляет детерминированный SHA-256 ключ для кэширования результатов.
-        Одинаковые входные данные всегда дают одинаковый ключ.
-        """
         payload = f"{person_url}|{garment_url}|{mask_url or ''}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def _get_cached_result(self, cache_key: str) -> Optional[str]:
-        """
-        Проверяет наличие ранее сохранённого результата в локальном хранилище.
-        Возвращает URL изображения или None, если кэш отсутствует.
-        """
         for ext in ("png", "jpg", "jpeg"):
             candidate = RESULTS_DIR / f"result_{cache_key}.{ext}"
             if candidate.exists() and candidate.stat().st_size > 0:
@@ -74,10 +59,6 @@ class CatVTONClient:
         return None
 
     async def _check_health(self, client: httpx.AsyncClient) -> bool:
-        """
-        Проверяет доступность ML-сервиса и состояние загруженной модели.
-        Возвращает True только если сервис отвечает и модель инициализирована.
-        """
         try:
             resp = await client.get(
                 f"{self.base_url}/health",
@@ -98,10 +79,6 @@ class CatVTONClient:
     async def _download_image(
             self, client: httpx.AsyncClient, url: str, label: str
     ) -> bytes:
-        """
-        Загружает изображение по URL в память с валидацией MIME-типа.
-        При ошибке возбуждает ValueError с описанием проблемы.
-        """
         try:
             resp = await client.get(url, timeout=IMAGE_DOWNLOAD_TIMEOUT)
             resp.raise_for_status()
@@ -123,24 +100,6 @@ class CatVTONClient:
             garment_img_url: str,
             mask_img_url: Optional[str] = None
     ) -> dict:
-        """
-        Выполняет виртуальную примерку через внешний CatVTON API.
-
-        Алгоритм:
-        1. Проверка флага включения ML-подсистемы
-        2. Поиск результата в локальном кэше
-        3. Healthcheck ML-сервиса
-        4. Загрузка исходных изображений
-        5. Отправка multipart-запроса на /predict
-        6. Парсинг ответа и сохранение результата
-        7. Fallback при любой ошибке
-
-        Returns:
-            dict с ключами:
-            - result_image_url: str — URL результирующего изображения
-            - error: str | None — диагностическое сообщение
-            - fallback: bool — флаг использования заглушки
-        """
         logger.info(
             f"Starting try-on: person={person_img_url}, "
             f"garment={garment_img_url}, mask={mask_img_url}"

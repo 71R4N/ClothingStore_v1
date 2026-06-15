@@ -1,4 +1,3 @@
-# backend/app/core/database.py
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import NullPool
@@ -20,7 +19,6 @@ POSTGRES_INDEXES_NAMING_CONVENTION = {
 }
 metadata = MetaData(naming_convention=POSTGRES_INDEXES_NAMING_CONVENTION)
 
-# ИСПРАВЛЕНО: Используем POSTGRES_DB_URL (asyncpg) и NullPool
 engine = create_async_engine(
     settings.POSTGRES_DB_URL,
     poolclass=NullPool,
@@ -49,7 +47,6 @@ class Base(DeclarativeBase):
     __abstract__ = True
     metadata = metadata
 
-# Импорты моделей для Alembic
 from app.users.models import User, UserSession
 from app.catalog.models import Category, Product, ProductSize, ProductColor, ProductVariant
 from app.cart.models import CartItem

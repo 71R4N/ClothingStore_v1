@@ -22,7 +22,6 @@ celery.conf.update(
     task_reject_on_worker_lost=True,
 )
 
-# Настройка периодических задач
 celery.conf.beat_schedule = {
     "cleanup-old-tryon-results": {
         "task": "worker.tasks.cleanup.cleanup_old_tryon_results",

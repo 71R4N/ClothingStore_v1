@@ -9,7 +9,6 @@ from typing import Optional
 
 
 class PaymentStatus(str, enum.Enum):
-    """Статусы платежа ЮKassa."""
     PENDING = "pending"
     WAITING_FOR_CAPTURE = "waiting_for_capture"
     SUCCEEDED = "succeeded"
@@ -17,7 +16,6 @@ class PaymentStatus(str, enum.Enum):
 
 
 class PaymentMethod(str, enum.Enum):
-    """Методы оплаты ЮKassa."""
     BANK_CARD = "bank_card"
     YOO_MONEY = "yoo_money"
     SBP = "sbp"
@@ -27,7 +25,6 @@ class PaymentMethod(str, enum.Enum):
 
 
 class Payment(Base):
-    """Модель платежа."""
     __tablename__ = "payments"
 
     id: Mapped[uuid.UUID] = mapped_column(

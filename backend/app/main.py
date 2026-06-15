@@ -20,14 +20,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CatVTON Shop", version="0.1.0", lifespan=lifespan)
 
-# Middleware для сессий (требуется для аутентификации SQLAdmin)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SESSION_SECRET_KEY
 )
 
-# CSRF Middleware (исключаем /admin из проверки)
-# Примечание: нужно обновить CSRFMiddleware, чтобы он пропускал /admin
 app.add_middleware(CSRFMiddleware)
 
 # CORS

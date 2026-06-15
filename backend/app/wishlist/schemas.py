@@ -6,12 +6,12 @@ from app.catalog.schemas import ProductVariantRead
 
 
 class WishlistCreate(BaseModel):
-    variant_id: int  # ← заменено!
+    variant_id: int
 
 
 class WishlistRead(BaseModel):
     id: UUID
-    user_id: Optional[UUID]  # ← Optional для гостевого доступа
+    user_id: Optional[UUID]
     variant_id: int
     created_at: datetime
     variant: Optional[ProductVariantRead] = None

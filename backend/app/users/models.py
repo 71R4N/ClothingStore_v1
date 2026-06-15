@@ -20,7 +20,6 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     role: Mapped[str] = mapped_column(default="user")  # guest, user, admin
 
-    # связи
     sessions: Mapped[List["UserSession"]] = relationship(back_populates="user")
     wishlist_items: Mapped[List["Wishlist"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     cart_items: Mapped[List["CartItem"]] = relationship(back_populates="user")

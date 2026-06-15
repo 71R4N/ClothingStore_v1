@@ -1,4 +1,3 @@
-# backend/app/admin/views.py
 from sqladmin import ModelView, action
 from sqladmin.helpers import get_object_identifier
 from starlette.requests import Request
@@ -161,9 +160,6 @@ class ReturnItemAdmin(ModelView, model=ReturnItem):
     can_view_details = True
 
 
-# ============================================================
-# ПОЛЬЗОВАТЕЛИ
-# ============================================================
 class UserAdmin(ModelView, model=User):
     """Админ-представление для модели User."""
 
@@ -214,9 +210,6 @@ class UserSessionAdmin(ModelView, model=UserSession):
     can_delete = True
 
 
-# ============================================================
-# КАТАЛОГ
-# ============================================================
 class CategoryAdmin(ModelView, model=Category):
     """Админ-представление для категорий."""
 
@@ -316,9 +309,6 @@ class ProductVariantAdmin(ModelView, model=ProductVariant):
     column_sortable_list = [ProductVariant.price, ProductVariant.stock_quantity]
 
 
-# ============================================================
-# ЗАКАЗЫ И КОРЗИНА
-# ============================================================
 class OrderAdmin(ModelView, model=Order):
     """Админ-представление для заказов."""
 
@@ -394,9 +384,6 @@ class CartItemAdmin(ModelView, model=CartItem):
     can_delete = True
 
 
-# ============================================================
-# WISHLIST И ПРИМЕРКА
-# ============================================================
 class WishlistAdmin(ModelView, model=Wishlist):
     """Админ-представление для списка желаний."""
 
@@ -435,9 +422,6 @@ class TryOnSessionAdmin(ModelView, model=TryOnSession):
     can_delete = True
 
 
-# ============================================================
-# ПЛАТЕЖИ
-# ============================================================
 class PaymentAdmin(ModelView, model=Payment):
     """Админ-представление для платежей."""
 

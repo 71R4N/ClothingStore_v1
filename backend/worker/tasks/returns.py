@@ -1,4 +1,3 @@
-# backend/worker/tasks/returns.py
 import asyncio
 import logging
 from uuid import UUID
@@ -16,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 async def _process_refund_async(return_id: UUID, amount: float):
-    """Асинхронная логика возврата средств."""
     async with AsyncSessionLocal() as session:
         return_repo = ReturnRepo(session)
         order_repo = OrderRepo(session)
@@ -43,7 +41,6 @@ async def _process_refund_async(return_id: UUID, amount: float):
             )
             return
 
-        # Находим успешный платёж для заказа
         payment = await payment_repo.get_by_order_id(return_obj.order_id)
         if not payment or not payment.yookassa_payment_id:
             error_msg = "No successful payment found for order"
@@ -51,7 +48,6 @@ async def _process_refund_async(return_id: UUID, amount: float):
             await service.mark_failed(return_id, error_msg)
             return
 
-        # Вызываем ЮKassa Refund API
         try:
             refund_result = await yookassa_client.create_refund(
                 payment_id=payment.yookassa_payment_id,
@@ -81,7 +77,6 @@ async def _process_refund_async(return_id: UUID, amount: float):
 
 
 async def _mark_refund_failed(return_id: UUID, error: str):
-    """Отмечает возврат как failed при превышении retry."""
     async with AsyncSessionLocal() as session:
         return_repo = ReturnRepo(session)
         order_repo = OrderRepo(session)
@@ -105,10 +100,6 @@ async def _mark_refund_failed(return_id: UUID, error: str):
     acks_late=True,
 )
 def process_refund_task(self, return_id: str, amount: float):
-    """
-    Celery-задача для асинхронного возврата средств через YooKassa.
-    Повторяется до 3 раз при ошибках.
-    """
     logger.info(
         f"Starting refund task for return {return_id}, amount: {amount}"
     )

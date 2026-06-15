@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/returns", tags=["returns"])
 
 
-# ==================== Пользовательские endpoints ====================
 
 @router.post(
     "/",
@@ -35,10 +34,6 @@ async def create_return(
     return_svc: ReturnServiceDep,
     current_user: OptionalUserDep,
 ):
-    """
-    Создаёт заявку на возврат товаров из доставленного заказа.
-    Поддерживает как авторизованных пользователей, так и гостей (с email).
-    """
     user_id = current_user.id if current_user else None
     guest_email = None if current_user else data.__dict__.get("guest_email")
 
@@ -67,7 +62,6 @@ async def list_user_returns(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """Возвращает список возвратов текущего пользователя."""
     items, total = await return_svc.get_user_returns(
         current_user.id, skip, limit
     )
@@ -80,10 +74,8 @@ async def get_return(
     return_svc: ReturnServiceDep,
     current_user: CurrentUserDep,
 ):
-    """Получает детальную информацию о возврате."""
     return_obj = await return_svc.get_return(return_id)
 
-    # Проверка доступа
     if (
         return_obj.user_id
         and return_obj.user_id != current_user.id
@@ -100,7 +92,6 @@ async def cancel_return(
     return_svc: ReturnServiceDep,
     current_user: CurrentUserDep,
 ):
-    """Отменяет заявку на возврат (только для статуса PENDING)."""
     try:
         return_obj = await return_svc.cancel_return(return_id, current_user.id)
         return await return_svc.get_return(return_obj.id)
@@ -114,7 +105,6 @@ async def cancel_return(
         )
 
 
-# ==================== Административные endpoints ====================
 
 @router.get("/admin/pending", response_model=list[ReturnRead])
 async def list_pending_returns(
@@ -123,7 +113,6 @@ async def list_pending_returns(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """Возвращает список заявок, ожидающих рассмотрения (только admin)."""
     if current_user.role != "admin":
         raise ForbiddenException()
     return await return_svc.get_pending_returns(skip, limit)
@@ -136,10 +125,6 @@ async def process_return_action(
     return_svc: ReturnServiceDep,
     current_user: CurrentUserDep,
 ):
-    """
-    Обрабатывает административное действие: approve или reject.
-    При одобрении автоматически запускается возврат средств.
-    """
     if current_user.role != "admin":
         raise ForbiddenException()
 

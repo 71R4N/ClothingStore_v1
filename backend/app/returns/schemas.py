@@ -23,7 +23,6 @@ class ReturnReasonEnum(str, Enum):
 
 
 class ReturnCreate(BaseModel):
-    """Схема для создания заявки на возврат одного товара."""
     order_id: UUID
     order_item_id: UUID
     quantity: int = Field(gt=0, description="Количество к возврату")
@@ -43,7 +42,6 @@ class ReturnCreate(BaseModel):
 
 
 class ReturnRead(BaseModel):
-    """Схема для чтения заявки на возврат."""
     id: UUID
     order_id: UUID
     order_item_id: UUID
@@ -61,7 +59,6 @@ class ReturnRead(BaseModel):
     updated_at: datetime
     resolved_at: Optional[datetime] = None
 
-    # Вложенная информация о товаре (вычисляется из order_item)
     product_name: Optional[str] = None
     size_label: Optional[str] = None
     color_name: Optional[str] = None
@@ -71,12 +68,10 @@ class ReturnRead(BaseModel):
 
 
 class ReturnActionRequest(BaseModel):
-    """Схема для административного действия (approve/reject)."""
     action: str = Field(pattern="^(approve|reject)$")
     rejection_reason: Optional[str] = Field(None, max_length=500)
 
 
 class ReturnListResponse(BaseModel):
-    """Список возвратов с пагинацией."""
     items: List[ReturnRead]
     total: int

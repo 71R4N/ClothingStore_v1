@@ -1,4 +1,3 @@
-# backend/app/tryon/routes.py
 from fastapi import APIRouter, Query
 from app.tryon.schemas import TryOnRequest, TryOnSessionRead
 from app.tryon.dependencies import TryOnServiceDep
@@ -18,7 +17,7 @@ async def create_tryon(
         data: TryOnRequest,
         tryon_svc: TryOnServiceDep,
         current_user: OptionalUserDep,
-        session: SessionDbDep,  # ИСПРАВЛЕНО: внедрение активной сессии БД
+        session: SessionDbDep,
 ):
     variant_repo = ProductVariantRepo(session)
     variant = await variant_repo.read_by_id(data.variant_id)

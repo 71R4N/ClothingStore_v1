@@ -1,4 +1,3 @@
-# backend/app/admin/auth.py
 from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 from app.core.security import decode_access_token, verify_password
@@ -71,9 +70,7 @@ class AdminAuth(AuthenticationBackend):
 
         if session_cookie:
             try:
-                # Starlette использует TimestampSigner, так как max_age по умолчанию 14 дней
                 signer = TimestampSigner(settings.SESSION_SECRET_KEY)
-                # Пытаемся расшифровать вручную
                 decoded_bytes = signer.unsign(session_cookie, max_age=14 * 24 * 60 * 60)
                 decoded_dict = json.loads(decoded_bytes.decode("utf-8"))
                 print(f"[ADMIN AUTH] Manually decoded session: {decoded_dict}")
@@ -85,7 +82,6 @@ class AdminAuth(AuthenticationBackend):
         admin_user_id = request.session.get("admin_user_id")
 
         if not admin_user_id:
-            # Fallback на JWT
             token = request.cookies.get("access_token")
             if not token:
                 auth_header = request.headers.get("Authorization")

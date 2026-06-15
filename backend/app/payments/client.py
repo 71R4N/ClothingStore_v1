@@ -9,8 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class YooKassaClient:
-    """Асинхронный клиент для работы с API ЮKassa."""
-
     BASE_URL = "https://api.yookassa.ru/v3"
 
     def __init__(self):
@@ -24,7 +22,6 @@ class YooKassaClient:
             )
 
     def _get_headers(self, idempotence_key: Optional[str] = None) -> dict:
-        """Формирует заголовки для запроса."""
         headers = {
             "Content-Type": "application/json",
         }
@@ -33,7 +30,6 @@ class YooKassaClient:
         return headers
 
     def _get_auth(self) -> tuple:
-        """Возвращает tuple для Basic Auth."""
         if not self.shop_id or not self.secret_key:
             raise YooKassaConfigError(
                 "YooKassa shop_id and secret_key are required"
@@ -49,10 +45,6 @@ class YooKassaClient:
             return_url: Optional[str] = None,
             cancel_url: Optional[str] = None,
     ) -> dict:
-        """
-        Создает платеж в ЮKassa.
-        Возвращает ответ от API в формате JSON.
-        """
         url = f"{self.BASE_URL}/payments"
         idempotence_key = str(uuid.uuid4())
 
@@ -103,7 +95,6 @@ class YooKassaClient:
             raise YooKassaAPIError(f"Request error: {str(e)}")
 
     async def get_payment(self, payment_id: str) -> dict:
-        """Получает информацию о платеже по его ID в ЮKassa."""
         url = f"{self.BASE_URL}/payments/{payment_id}"
 
         try:
@@ -130,10 +121,6 @@ class YooKassaClient:
             amount: float,
             description: Optional[str] = None,
     ) -> dict:
-        """
-        Создаёт возврат средств через YooKassa API.
-        Используется при одобрении заявки на возврат товара.
-        """
         url = f"{self.BASE_URL}/refunds"
         idempotence_key = str(uuid.uuid4())
 
@@ -182,7 +169,6 @@ class YooKassaClient:
             raise YooKassaAPIError(f"Refund request error: {str(e)}")
 
     async def cancel_payment(self, payment_id: str) -> dict:
-        """Отменяет платеж."""
         url = f"{self.BASE_URL}/payments/{payment_id}/cancel"
         idempotence_key = str(uuid.uuid4())
 
@@ -202,5 +188,4 @@ class YooKassaClient:
             raise YooKassaAPIError(f"API error: {e.response.text}")
 
 
-# Глобальный экземпляр клиента
 yookassa_client = YooKassaClient()

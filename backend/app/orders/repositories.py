@@ -10,7 +10,6 @@ class OrderRepo(SqlAlchemyRepo):
     model = Order
 
     async def get_with_items(self, order_id: UUID) -> Order | None:
-        """Получает заказ с жадной загрузкой позиций, вариантов и возвратов."""
         stmt = select(self.model).where(self.model.id == order_id).options(
             selectinload(self.model.items)
             .selectinload(OrderItem.variant)
@@ -21,15 +20,13 @@ class OrderRepo(SqlAlchemyRepo):
             selectinload(self.model.items)
             .selectinload(OrderItem.variant)
             .selectinload(ProductVariant.size),
-            # Жадная загрузка индивидуальных заявок на возврат
             selectinload(self.model.items).selectinload(OrderItem.returns),
-        ).execution_options(populate_existing=True)  # Принудительное обновление связей
+        ).execution_options(populate_existing=True)
 
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_user_orders(self, user_id: UUID, skip: int = 0, limit: int = 20):
-        """Получает список заказов пользователя."""
         stmt = (
             select(self.model)
             .where(self.model.user_id == user_id)
@@ -60,7 +57,6 @@ class OrderRepo(SqlAlchemyRepo):
             skip: int = 0,
             limit: int = 20
     ):
-        """Получает заказы пользователя с фильтрацией по группе статусов."""
         status_filters = {
             "active": [OrderStatus.PENDING, OrderStatus.PROCESSING, OrderStatus.SHIPPED],
             "history": [OrderStatus.DELIVERED, OrderStatus.CANCELLED],

@@ -32,10 +32,6 @@ async def initiate_payment(
     current_user: CurrentUserDep,
     payment_svc: PaymentServiceDep,
 ):
-    """
-    Инициирует платеж для заказа.
-    Возвращает URL для редиректа на страницу оплаты ЮKassa.
-    """
     try:
         payment = await payment_svc.create_payment_for_order(data.order_id)
 
@@ -79,14 +75,9 @@ async def poll_order_payment_status(
     current_user: CurrentUserDep,
     payment_svc: PaymentServiceDep,
 ):
-    """
-    Проверяет статус платежа для заказа через API ЮKassa.
-    Используется для polling после редиректа с оплаты.
-    """
     try:
         payment = await payment_svc.poll_payment_status(order_id)
 
-        # Проверка доступа
         order = await payment_svc.order_repo.read_by_id(order_id)
         if order and order.user_id:
             if (
@@ -111,7 +102,6 @@ async def poll_order_payment_status(
     except PaymentNotFoundError:
         raise NotFoundException(detail="Payment not found")
     except YooKassaAPIError:
-        # Возвращаем текущий статус из БД при ошибке API
         payment = await payment_svc.payment_repo.get_by_order_id(order_id)
         if payment:
             return PaymentPollResponse(
@@ -136,12 +126,10 @@ async def get_payment(
     current_user: CurrentUserDep,
     payment_svc: PaymentServiceDep,
 ):
-    """Получает информацию о платеже."""
     payment = await payment_svc.payment_repo.read_by_id(payment_id)
     if not payment:
         raise NotFoundException(detail="Payment not found")
 
-    # Проверка доступа
     order = await payment_svc.order_repo.read_by_id(payment.order_id)
     if order and order.user_id:
         if (
@@ -159,7 +147,6 @@ async def get_order_payments(
     current_user: CurrentUserDep,
     payment_svc: PaymentServiceDep,
 ):
-    """Получает все платежи для заказа."""
     order = await payment_svc.order_repo.read_by_id(order_id)
     if not order:
         raise NotFoundException(detail="Order not found")
@@ -180,7 +167,6 @@ async def cancel_payment(
     current_user: CurrentUserDep,
     payment_svc: PaymentServiceDep,
 ):
-    """Отменяет платеж."""
     try:
         payment = await payment_svc.cancel_payment(payment_id)
         return payment

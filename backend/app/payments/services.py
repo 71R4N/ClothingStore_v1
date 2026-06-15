@@ -17,17 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 class PaymentService:
-    """Сервис для работы с платежами."""
 
     def __init__(self, payment_repo: PaymentRepo, order_repo: OrderRepo):
         self.payment_repo = payment_repo
         self.order_repo = order_repo
 
     async def create_payment_for_order(self, order_id: UUID) -> Payment:
-        """
-        Создает платеж в ЮKassa для указанного заказа.
-        Возвращает созданный объект Payment.
-        """
         order = await self.order_repo.read_by_id(order_id)
         if not order:
             raise ValueError(f"Order {order_id} not found")
@@ -46,7 +41,6 @@ class PaymentService:
 
         description = f"Заказ #{str(order.id)[:8]} на сумму {order.total} руб."
 
-        # Формируем URL возврата с order_id
         return_url = f"{settings.YOOKASSA_RETURN_URL}?order_id={order.id}"
         cancel_url = f"{settings.YOOKASSA_CANCEL_URL}?order_id={order.id}"
 
@@ -100,10 +94,6 @@ class PaymentService:
             raise
 
     async def poll_payment_status(self, order_id: UUID) -> Payment:
-        """
-        Проверяет статус платежа через API ЮKassa.
-        Используется вместо webhook для тестирования.
-        """
         payment = await self.payment_repo.get_by_order_id(order_id)
         if not payment or not payment.yookassa_payment_id:
             raise PaymentNotFoundError()
@@ -173,7 +163,6 @@ class PaymentService:
     async def _update_order_status(
         self, order_id: UUID, new_status: OrderStatus
     ):
-        """Обновляет статус заказа."""
         order = await self.order_repo.read_by_id(order_id)
         if order:
             order.status = new_status
@@ -183,11 +172,9 @@ class PaymentService:
             )
 
     async def get_order_payments(self, order_id: UUID) -> list[Payment]:
-        """Возвращает все платежи для заказа."""
         return await self.payment_repo.get_order_payments(order_id)
 
     async def cancel_payment(self, payment_id: UUID) -> Payment:
-        """Отменяет платеж."""
         payment = await self.payment_repo.read_by_id(payment_id)
         if not payment:
             raise PaymentNotFoundError()

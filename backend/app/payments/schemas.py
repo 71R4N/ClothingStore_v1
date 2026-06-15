@@ -5,12 +5,10 @@ from datetime import datetime
 
 
 class PaymentCreate(BaseModel):
-    """Схема для создания платежа."""
     order_id: UUID
 
 
 class PaymentRead(BaseModel):
-    """Схема для чтения платежа."""
     id: UUID
     order_id: UUID
     yookassa_payment_id: Optional[str] = None
@@ -31,7 +29,6 @@ class PaymentRead(BaseModel):
 
 
 class PaymentInitiateResponse(BaseModel):
-    """Ответ при инициации платежа."""
     payment_id: UUID
     yookassa_payment_id: str
     confirmation_url: str
@@ -40,7 +37,6 @@ class PaymentInitiateResponse(BaseModel):
 
 
 class PaymentPollResponse(BaseModel):
-    """Ответ при polling статуса платежа."""
     id: UUID
     order_id: UUID
     status: str

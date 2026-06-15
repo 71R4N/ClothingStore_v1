@@ -9,11 +9,9 @@ from typing import Optional, List
 
 
 class ReturnRepo(SqlAlchemyRepo):
-    """Репозиторий для работы с индивидуальными заявками на возврат."""
     model = Return
 
     async def get_with_item_details(self, return_id: UUID) -> Optional[Return]:
-        """Получает возврат с жадной загрузкой позиции и товара."""
         stmt = (
             select(self.model)
             .where(self.model.id == return_id)
@@ -39,7 +37,6 @@ class ReturnRepo(SqlAlchemyRepo):
         skip: int = 0,
         limit: int = 20
     ) -> List[Return]:
-        """Получает список возвратов пользователя."""
         stmt = (
             select(self.model)
             .where(self.model.user_id == user_id)
@@ -62,7 +59,6 @@ class ReturnRepo(SqlAlchemyRepo):
         return result.scalars().unique().all()
 
     async def count_user_returns(self, user_id: UUID) -> int:
-        """Подсчитывает количество возвратов пользователя."""
         stmt = (
             select(func.count())
             .select_from(self.model)
@@ -75,7 +71,6 @@ class ReturnRepo(SqlAlchemyRepo):
         self,
         order_item_id: UUID,
     ) -> Optional[Return]:
-        """Проверяет наличие активной заявки для конкретной позиции."""
         stmt = (
             select(self.model)
             .where(
@@ -93,7 +88,6 @@ class ReturnRepo(SqlAlchemyRepo):
     async def get_returned_quantity_for_item(
         self, order_item_id: UUID
     ) -> int:
-        """Вычисляет суммарное количество, запрошенное к возврату."""
         stmt = (
             select(func.coalesce(func.sum(self.model.quantity), 0))
             .where(
@@ -111,7 +105,6 @@ class ReturnRepo(SqlAlchemyRepo):
     async def get_pending_returns(
         self, skip: int = 0, limit: int = 50
     ) -> List[Return]:
-        """Получает заявки, ожидающие рассмотрения."""
         stmt = (
             select(self.model)
             .where(self.model.status == ReturnStatus.PENDING)

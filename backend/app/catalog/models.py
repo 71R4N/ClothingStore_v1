@@ -85,7 +85,6 @@ class ProductVariant(Base):
     sku: Mapped[str] = mapped_column(String(100), unique=True)
     stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
     price: Mapped[float] = mapped_column(Numeric(10, 2, asdecimal=False))
-    # ✅ Изображения варианта хранятся здесь
     image_url: Mapped[Optional[str]] = mapped_column(String(500))
     attributes: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 

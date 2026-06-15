@@ -64,11 +64,9 @@ class CartRepo(SqlAlchemyRepo):
         for item in session_items:
             existing = await self.find_item(user_id, None, item.variant_id)
             if existing:
-                # Если товар уже есть в корзине юзера — увеличиваем количество
                 existing.quantity += item.quantity
-                await self.session.delete(item)  # Удаляем гостевую запись
+                await self.session.delete(item)
             else:
-                # Иначе просто привязываем гостевую запись к юзеру
                 item.user_id = user_id
                 item.session_id = None
 

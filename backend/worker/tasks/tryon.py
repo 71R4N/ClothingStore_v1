@@ -1,4 +1,3 @@
-# backend/worker/tasks/tryon.py
 import asyncio
 import logging
 from uuid import UUID
@@ -12,10 +11,8 @@ logger = logging.getLogger(__name__)
 
 @shared_task(name='process_tryon_session', bind=True, max_retries=3)
 def process_tryon_session(self, session_id: str):
-    """Celery task for processing try-on session with isolated event loop"""
     logger.info(f"Starting Celery task for session {session_id}")
 
-    # Создаём новый event loop для изоляции от контекста Celery
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 

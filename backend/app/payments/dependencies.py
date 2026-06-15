@@ -7,7 +7,6 @@ from app.orders.repositories import OrderRepo
 
 
 def get_payment_service(session: SessionDbDep) -> PaymentService:
-    """Фабрика для создания PaymentService."""
     payment_repo = PaymentRepo(session)
     order_repo = OrderRepo(session)
     return PaymentService(payment_repo, order_repo)

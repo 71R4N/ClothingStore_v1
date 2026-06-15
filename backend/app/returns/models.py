@@ -12,7 +12,6 @@ from typing import Optional
 
 
 class ReturnStatus(str, enum.Enum):
-    """Статусы заявки на возврат."""
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -22,7 +21,6 @@ class ReturnStatus(str, enum.Enum):
 
 
 class ReturnReasonType(str, enum.Enum):
-    """Причины возврата товара."""
     DEFECTIVE = "defective"
     WRONG_SIZE = "wrong_size"
     WRONG_COLOR = "wrong_color"
@@ -31,11 +29,6 @@ class ReturnReasonType(str, enum.Enum):
 
 
 class Return(Base):
-    """
-    Модель заявки на возврат одного товара из заказа.
-    Каждая запись представляет собой независимую заявку,
-    что позволяет администратору принимать решения по каждому товару отдельно.
-    """
     __tablename__ = "returns"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -93,7 +86,6 @@ class Return(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # Связи
     order: Mapped["Order"] = relationship("Order", back_populates="returns")
     order_item: Mapped["OrderItem"] = relationship(
         "OrderItem", back_populates="returns"
@@ -109,43 +101,34 @@ class Return(Base):
 
     @property
     def total_amount(self) -> float:
-        """Совместимость: возвращает refund_amount."""
         return self.refund_amount
 
     @property
     def product_name(self) -> Optional[str]:
-        """Вычисляемое свойство: наименование товара из связанного варианта."""
         if self.order_item and self.order_item.variant and self.order_item.variant.product:
             return self.order_item.variant.product.name
         return None
 
     @property
     def size_label(self) -> Optional[str]:
-        """Вычисляемое свойство: размер товара."""
         if self.order_item and self.order_item.variant and self.order_item.variant.size:
             return self.order_item.variant.size.size_label
         return None
 
     @property
     def color_name(self) -> Optional[str]:
-        """Вычисляемое свойство: цвет товара."""
         if self.order_item and self.order_item.variant and self.order_item.variant.color:
             return self.order_item.variant.color.color_name
         return None
 
     @property
     def image_url(self) -> Optional[str]:
-        """Вычисляемое свойство: URL изображения варианта товара."""
         if self.order_item and self.order_item.variant:
             return self.order_item.variant.image_url
         return None
 
 
 class ReturnItem(Base):
-    """
-    Устаревшая модель позиции возврата.
-    Сохранена для обратной совместимости, но более не используется в новой логике.
-    """
     __tablename__ = "return_items"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -173,7 +156,6 @@ class ReturnItem(Base):
     photos: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[CreatedAtCol]
 
-    # Связи (устаревшие, не используются в новой логике)
     order_item: Mapped["OrderItem"] = relationship(
         "OrderItem", back_populates="return_items"
     )

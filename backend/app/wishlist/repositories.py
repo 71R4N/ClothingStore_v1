@@ -79,13 +79,11 @@ class WishlistRepo(SqlAlchemyRepo):
         await self.session.commit()
 
     async def clear_session_wishlist(self, session_id: str):
-        """Удаляет все товары из гостевого избранного при выходе из аккаунта."""
         stmt = delete(self.model).where(self.model.session_id == session_id)
         await self.session.execute(stmt)
         await self.session.commit()
 
     async def merge_session_wishlist_to_user(self, user_id: UUID, session_id: str):
-        """При регистрации переносим избранное сессии пользователю."""
         session_items = await self.get_session_wishlist(session_id)
         for item in session_items:
             existing = await self.find_item(user_id, None, item.variant_id)

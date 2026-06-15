@@ -14,7 +14,6 @@ async def get_user_or_session(
     user_id = current_user.id if current_user else None
     is_new = False
 
-    # Если нет ни юзера, ни сессии — генерируем новую сессию
     if not user_id and not session_id:
         session_id = str(uuid4())
         is_new = True

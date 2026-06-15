@@ -53,5 +53,4 @@ class WishlistService:
         )
 
     async def clear_session(self, session_id: str):
-        """Очищает гостевое избранное при выходе из аккаунта."""
         await self.repo.clear_session_wishlist(session_id)

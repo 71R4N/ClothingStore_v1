@@ -29,13 +29,10 @@ async def get_order(
 ):
     order = await order_svc.get_order(order_id)
 
-    # Проверка доступа: только владелец или админ
     if current_user:
-        # Заказ принадлежит пользователю
         if order.user_id and order.user_id != current_user.id and current_user.role != "admin":
             raise ForbiddenException(detail="You can only view your own orders")
     else:
-        # Гость пытается получить заказ - запрещаем
         if order.user_id:
             raise ForbiddenException(detail="Authentication required")
 
@@ -53,10 +50,6 @@ async def list_orders(
         skip: int = Query(0, ge=0),
         limit: int = Query(20, ge=1, le=100)
 ):
-    """
-    Возвращает список заказов текущего пользователя.
-    Поддерживает фильтрацию по группе статусов.
-    """
     return await order_svc.get_user_orders_filtered(
         current_user.id, status_group, skip, limit
     )
@@ -68,9 +61,6 @@ async def cancel_order_by_user(
         order_svc: OrderServiceDep,
         current_user: CurrentUserDep
 ):
-    """
-    Позволяет пользователю отменить собственный заказ в статусе PENDING.
-    """
     return await order_svc.cancel_order_by_user(order_id, current_user.id)
 
 

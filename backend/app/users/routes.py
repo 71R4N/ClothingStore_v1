@@ -35,7 +35,6 @@ async def get_user(
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: UUID, user_svc: UserSvcDep, current_user: CurrentUserDep):
-    # только админ или сам пользователь может удалить
     if str(current_user.id) != str(user_id) and current_user.role != "admin":
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException()

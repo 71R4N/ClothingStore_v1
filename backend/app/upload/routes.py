@@ -18,5 +18,4 @@ async def upload_file(file: UploadFile = File(...)):
     with open(filepath, "wb") as f:
         f.write(await file.read())
 
-    # Возвращаем URL, который nginx сможет отдать
     return {"url": f"/static/uploads/{filename}"}

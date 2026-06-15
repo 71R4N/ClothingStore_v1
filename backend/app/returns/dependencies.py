@@ -8,7 +8,6 @@ from app.catalog.repositories import ProductVariantRepo
 
 
 def get_return_service(session: SessionDbDep) -> ReturnService:
-    """Фабрика для создания ReturnService."""
     return ReturnService(
         return_repo=ReturnRepo(session),
         order_repo=OrderRepo(session),

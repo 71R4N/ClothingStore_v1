@@ -90,7 +90,6 @@ async def logout(
         session_id: str | None = Cookie(None),
         session: SessionDbDep = None,
 ):
-    # При выходе из аккаунта очищаем гостевую корзину и избранное
     if session_id and session:
         cart_repo = CartRepo(session)
         wishlist_repo = WishlistRepo(session)
