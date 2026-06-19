@@ -38,7 +38,7 @@ class Settings(BaseSettings):
 
     CATVTON_API_URL: str = "http://localhost:8001"
     CATVTON_TIMEOUT: int = 300
-    CATVTON_ENABLED: bool = False
+    CATVTON_ENABLED: bool = True
     CATVTON_FALLBACK_IMAGE: str = "/static/images/tryon_fallback.png"
 
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:8000"

@@ -9,6 +9,7 @@ class CategoryBase(BaseModel):
     parent_id: Optional[int] = None
     description: Optional[str] = None
     image_url: Optional[str] = None
+    tryon_category: Optional[str] = None
 
 
 class CategoryCreate(CategoryBase):
@@ -94,6 +95,7 @@ class ProductCreate(ProductBase):
 class ProductRead(ProductBase):
     id: int
     created_at: datetime
+    category: Optional[CategoryRead] = None
     sizes: List[ProductSizeRead] = Field(default_factory=list)
     colors: List[ProductColorRead] = Field(default_factory=list)
     variants: List[ProductVariantRead] = Field(default_factory=list)

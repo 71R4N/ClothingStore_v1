@@ -18,6 +18,7 @@ class Category(Base):
     parent_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text)
     image_url: Mapped[Optional[str]] = mapped_column(String(500))
+    tryon_category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     parent: Mapped[Optional["Category"]] = relationship("Category", remote_side=[id], backref="children")
     products: Mapped[List["Product"]] = relationship("Product", back_populates="category")

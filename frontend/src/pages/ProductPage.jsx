@@ -1,16 +1,17 @@
+// frontend/src/pages/ProductPage.jsx
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom'; // ✅ Добавлен useNavigate
+import { useParams, useNavigate } from 'react-router-dom';
 import { catalogService } from '../services/catalogService';
 import { useCart } from '../hooks/useCart';
 import { useWishlist } from '../hooks/useWishlist';
 import { HeartOutlined, HeartFilled } from '@ant-design/icons';
-import { Typography, Button, Image, Select, Row, Col, Space, Spin, message } from 'antd';
+import { Typography, Button, Image, Select, Row, Col, Space, Spin, message, Tooltip } from 'antd';
 
 const { Title, Text } = Typography;
 
 function ProductPage() {
   const { slug } = useParams();
-  const navigate = useNavigate(); // ✅ Инициализация навигатора
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [selectedSizeId, setSelectedSizeId] = useState(null);
   const [selectedColorId, setSelectedColorId] = useState(null);
@@ -18,20 +19,20 @@ function ProductPage() {
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
   const handleWishlistToggle = async () => {
-        if (!selectedVariant) return;
-        try {
-            if (isInWishlist(selectedVariant.id)) {
-                await removeFromWishlist(selectedVariant.id);
-                message.success('Товар удален из избранного');
-            } else {
-                await addToWishlist(selectedVariant.id);
-                message.success('Товар добавлен в избранное');
-            }
-        } catch (e) {
-            console.error(e);
-            message.error(e.response?.data?.detail || 'Ошибка при обновлении избранного');
-        }
-    };
+    if (!selectedVariant) return;
+    try {
+      if (isInWishlist(selectedVariant.id)) {
+        await removeFromWishlist(selectedVariant.id);
+        message.success('Товар удален из избранного');
+      } else {
+        await addToWishlist(selectedVariant.id);
+        message.success('Товар добавлен в избранное');
+      }
+    } catch (e) {
+      console.error(e);
+      message.error(e.response?.data?.detail || 'Ошибка при обновлении избранного');
+    }
+  };
 
   useEffect(() => {
     catalogService.getProductBySlug(slug)
@@ -58,6 +59,10 @@ function ProductPage() {
     return Math.min(...product.variants.map(v => v.price));
   }, [product]);
 
+  // Проверка возможности виртуальной примерки для данной категории
+  const tryonCategory = product?.category?.tryon_category;
+  const canTryOn = !!tryonCategory;
+
   if (!product) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
 
   const mainImg = selectedVariant?.image_url || product.variants?.[0]?.image_url || 'https://via.placeholder.com/400';
@@ -65,8 +70,8 @@ function ProductPage() {
   const handleAddToCart = async () => {
     if (!selectedVariant) return;
     try {
-      await addToCart(selectedVariant.id, 1); 
-      message.success('Товар добавлен в корзину'); // ✅ Уведомление
+      await addToCart(selectedVariant.id, 1);
+      message.success('Товар добавлен в корзину');
     } catch (e) {
       console.error(e);
       message.error(e.response?.data?.detail || 'Ошибка добавления в корзину');
@@ -88,21 +93,17 @@ function ProductPage() {
       <Col xs={24} md={14}>
         <Title level={2}>{product.name}</Title>
         <Text type="secondary">{product.brand}</Text>
-        
         <div style={{ marginTop: 16 }}>
           <Text strong style={{ fontSize: '1.8rem', marginRight: 16 }}>
             {selectedVariant ? selectedVariant.price : `от ${minPrice}`} ₽
           </Text>
         </div>
-        
         <div style={{ marginTop: 24 }}>
           <Title level={4}>Описание</Title>
           <Text>{product.description}</Text>
         </div>
-        
         <div style={{ marginTop: 24 }}>
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            
             {/* Выбор цвета */}
             {product.colors?.length > 0 && (
               <div>
@@ -121,10 +122,10 @@ function ProductPage() {
                   {product.colors.map(c => (
                     <Select.Option key={c.id} value={c.id}>
                       <Space>
-                        <div style={{ 
-                          width: 16, height: 16, 
-                          backgroundColor: c.color_hex, 
-                          borderRadius: '50%', 
+                        <div style={{
+                          width: 16, height: 16,
+                          backgroundColor: c.color_hex,
+                          borderRadius: '50%',
                           border: '1px solid #ccc',
                           display: 'inline-block'
                         }} />
@@ -158,13 +159,13 @@ function ProductPage() {
             {/* Информация о наличии */}
             {selectedVariant && (
               <Text type={selectedVariant.stock_quantity > 0 ? "success" : "danger"}>
-                {selectedVariant.stock_quantity > 0 
-                  ? `В наличии: ${selectedVariant.stock_quantity} шт.` 
+                {selectedVariant.stock_quantity > 0
+                  ? `В наличии: ${selectedVariant.stock_quantity} шт.`
                   : 'Нет в наличии для выбранной комбинации'}
               </Text>
             )}
 
-            <Button 
+            <Button
               icon={isInWishlist(selectedVariant?.id) ? <HeartFilled style={{color: '#ff4d4f'}} /> : <HeartOutlined />}
               onClick={handleWishlistToggle}
               disabled={!selectedVariant}
@@ -172,21 +173,30 @@ function ProductPage() {
             >
               {isInWishlist(selectedVariant?.id) ? 'В избранном' : 'В избранное'}
             </Button>
-            
-            {/* ✅ Исправленная кнопка примерки */}
-            <Button 
-              onClick={() => navigate(`/try-on?variant=${selectedVariant.id}&product=${product.slug}`)}
-              disabled={!selectedVariant}
-              size="large"
-            >
-              ✨ Примерить
-            </Button>
 
-            <Button 
-              type="primary" 
-              size="large" 
+            {/* Кнопка виртуальной примерки с учетом категории */}
+            {canTryOn ? (
+              <Button
+                onClick={() => navigate(`/try-on?variant=${selectedVariant.id}&product=${product.slug}`)}
+                disabled={!selectedVariant}
+                size="large"
+                block
+              >
+                ✨ Примерить
+              </Button>
+            ) : (
+              <Tooltip title="Виртуальная примерка для данной категории товаров недоступна">
+                <Button disabled size="large" block>
+                  ✨ Примерить
+                </Button>
+              </Tooltip>
+            )}
+
+            <Button
+              type="primary"
+              size="large"
               block
-              onClick={handleAddToCart} 
+              onClick={handleAddToCart}
               disabled={!selectedVariant || selectedVariant.stock_quantity === 0}
             >
               Добавить в корзину

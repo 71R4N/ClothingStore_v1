@@ -9,6 +9,7 @@ class TryOnRequest(BaseModel):
     person_image_url: str
     garment_image_url: str
     mask_image_url: Optional[str] = None
+    category: Optional[str] = "upper_body"
 
 
 class TryOnResult(BaseModel):

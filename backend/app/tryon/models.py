@@ -29,6 +29,7 @@ class TryOnSession(Base):
     created_at: Mapped[CreatedAtCol]
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(String(50), default="upper_body")
 
     user: Mapped[Optional["User"]] = relationship("User", back_populates="tryon_sessions")
     variant: Mapped[Optional["ProductVariant"]] = relationship(

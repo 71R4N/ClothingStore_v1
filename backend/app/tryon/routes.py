@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Query
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.tryon.schemas import TryOnRequest, TryOnSessionRead
 from app.tryon.dependencies import TryOnServiceDep
 from app.auth.dependencies import OptionalUserDep
 from app.catalog.repositories import ProductVariantRepo
+from app.catalog.models import Product
 from app.core.database import SessionDbDep
 from uuid import UUID
 from app.core.exceptions import ForbiddenException
 import logging
 
 logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/try-on", tags=["tryon"])
 
 
@@ -26,13 +30,27 @@ async def create_tryon(
         raise ProductNotFoundError(detail="Product variant not found")
 
     garment_image_url = variant.image_url or data.garment_image_url
+
+    stmt = select(Product).where(Product.id == variant.product_id).options(
+        selectinload(Product.category)
+    )
+    result = await session.execute(stmt)
+    product = result.scalar_one_or_none()
+
+    category = data.category
+    if not category and product and product.category:
+        category = product.category.tryon_category or "upper_body"
+    elif not category:
+        category = "upper_body"
+
     user_id = current_user.id if current_user else None
 
     request_data = TryOnRequest(
         variant_id=data.variant_id,
         person_image_url=data.person_image_url,
         garment_image_url=garment_image_url,
-        mask_image_url=data.mask_image_url
+        mask_image_url=data.mask_image_url,
+        category=category
     )
 
     session_obj = await tryon_svc.create_session(user_id, request_data)

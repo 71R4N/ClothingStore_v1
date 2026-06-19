@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 021904297c4a
+Revision ID: 2eadbc1d70fb
 Revises: 
-Create Date: 2026-06-07 21:27:09.893132
+Create Date: 2026-06-19 05:38:43.812440
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '021904297c4a'
+revision: str = '2eadbc1d70fb'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -28,6 +28,7 @@ def upgrade() -> None:
     sa.Column('parent_id', sa.Integer(), nullable=True),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('image_url', sa.String(length=500), nullable=True),
+    sa.Column('tryon_category', sa.String(length=50), nullable=True),
     sa.ForeignKeyConstraint(['parent_id'], ['categories.id'], name=op.f('categories_parent_id_fkey')),
     sa.PrimaryKeyConstraint('id', name=op.f('categories_pkey'))
     )
@@ -177,6 +178,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('completed_at', sa.DateTime(), nullable=True),
     sa.Column('error_message', sa.Text(), nullable=True),
+    sa.Column('category', sa.String(length=50), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('tryon_sessions_user_id_fkey'), ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], name=op.f('tryon_sessions_variant_id_fkey')),
     sa.PrimaryKeyConstraint('id', name=op.f('tryon_sessions_pkey'))

@@ -45,8 +45,9 @@ class CatVTONClient:
             person_url: str,
             garment_url: str,
             mask_url: Optional[str] = None,
+            category: str = "upper_body"
     ) -> str:
-        payload = f"{person_url}|{garment_url}|{mask_url or ''}"
+        payload = f"{person_url}|{garment_url}|{mask_url or ''}|{category}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def _get_cached_result(self, cache_key: str) -> Optional[str]:
@@ -98,7 +99,8 @@ class CatVTONClient:
             self,
             person_img_url: str,
             garment_img_url: str,
-            mask_img_url: Optional[str] = None
+            mask_img_url: Optional[str] = None,
+            category: str = "upper_body"
     ) -> dict:
         logger.info(
             f"Starting try-on: person={person_img_url}, "
@@ -107,9 +109,7 @@ class CatVTONClient:
         if not self.enabled:
             logger.warning("CatVTON is disabled in configuration")
             return self._make_fallback("ML service disabled by config")
-        cache_key = self._compute_cache_key(
-            person_img_url, garment_img_url, mask_img_url
-        )
+        cache_key = self._compute_cache_key(person_img_url, garment_img_url, mask_img_url, category)
         cached = self._get_cached_result(cache_key)
         if cached:
             return {
@@ -139,7 +139,7 @@ class CatVTONClient:
                 "person_image": ("person.jpg", person_bytes, "image/jpeg"),
                 "garment_image": ("garment.jpg", garment_bytes, "image/jpeg"),
             }
-            data = {"category": "upper_body", "num_inference_steps": "30"}
+            data = {"category": category, "num_inference_steps": "30"}
             if abs_mask_url:
                 try:
                     mask_bytes = await self._download_image(
